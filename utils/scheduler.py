@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from models import SessionLocal, User
 from utils.practices import practices_manager
 import pytz
@@ -240,7 +240,19 @@ async def send_practice_reminder(bot: Bot, user_id: int):
         should_send, message = should_send_reminder(user, days)
 
         if should_send and message:
-            await bot.send_message(chat_id=user_id, text=message, parse_mode='Markdown')
+            # Добавить кнопку для напоминаний о всходах (дни 2-5, этап 1)
+            keyboard = None
+            if user.current_stage == 1 and user.current_step >= 6 and 2 <= days <= 5:
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ У меня появились первые всходы!", callback_data="sprouts_appeared")]
+                ])
+
+            await bot.send_message(
+                chat_id=user_id,
+                text=message,
+                parse_mode='Markdown',
+                reply_markup=keyboard
+            )
             logger.info(f"Отправлено триггерное напоминание пользователю {user_id} (день {days}, этап {user.current_stage})")
         else:
             logger.debug(f"Напоминание не требуется для пользователя {user_id} (день {days}, этап {user.current_stage})")
@@ -329,16 +341,15 @@ def schedule_user_reminders(bot: Bot):
     Args:
         bot: Telegram Bot instance
     """
-    # ТЕСТИРОВАНИЕ: Запускать проверку каждую минуту (для быстрого теста)
-    # В продакшене изменить на: CronTrigger(minute=0)
+    # Запускать проверку каждый час (в начале часа)
     scheduler.add_job(
         check_and_send_reminders,
-        CronTrigger(minute='*'),  # ТЕСТ: Каждую минуту (было: minute=0)
+        CronTrigger(minute=0),  # Каждый час в 00 минут
         args=[bot],
         id='check_reminders',
         replace_existing=True
     )
-    logger.info("⚠️ ТЕСТ РЕЖИМ: Планировщик проверяет каждую минуту!")
+    logger.info("✅ Планировщик настроен: проверка каждый час в 00 минут")
 
 
 def schedule_daily_stage5_practices(bot: Bot):

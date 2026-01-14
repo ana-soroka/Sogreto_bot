@@ -3,7 +3,7 @@
 /status, /pause, /resume, /reset
 """
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from utils import error_handler, get_user_stats, pause_user, resume_user, reset_user_progress
 from models import SessionLocal
@@ -37,7 +37,12 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Продолжай в том же духе! 💪"
         )
 
-        await update.message.reply_text(status_message)
+        # Добавить кнопку для продолжения практики
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("▶️ Продолжить практику", callback_data="continue_practice")]
+        ])
+
+        await update.message.reply_text(status_message, reply_markup=keyboard, parse_mode='Markdown')
     finally:
         db.close()
 
@@ -78,16 +83,36 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @error_handler
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /reset"""
+    """Обработчик команды /reset - показать подтверждение сброса"""
     user = update.effective_user
     db = SessionLocal()
     try:
-        reset_user_progress(db, user.id)
-        await update.message.reply_text(
-            "🔄 Прогресс сброшен!\n\n"
-            "Вы можете начать практики заново командой /start_practice\n\n"
-            "Начнём сначала! 🌱"
+        # Получить текущий прогресс пользователя
+        from utils.db import get_or_create_user
+        db_user = get_or_create_user(
+            db,
+            telegram_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name
         )
-        logger.info(f"Пользователь {user.id} сбросил прогресс")
+
+        # Создать клавиатуру с подтверждением
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Начать заново", callback_data="confirm_reset")],
+            [InlineKeyboardButton("❌ Нет, вернуться", callback_data="cancel_reset")]
+        ])
+
+        await update.message.reply_text(
+            "⚠️ **Внимание!**\n\n"
+            f"Вы уверены, что хотите сбросить весь прогресс?\n\n"
+            f"📍 Текущий этап: {db_user.current_stage}\n"
+            f"📝 Текущий шаг: {db_user.current_step}\n"
+            f"📅 День: {db_user.current_day}\n\n"
+            "Вы можете начать практики заново или вернуться к текущей практике.",
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+        logger.info(f"Пользователь {user.id} запросил сброс прогресса (ожидание подтверждения)")
     finally:
         db.close()

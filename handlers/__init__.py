@@ -10,6 +10,7 @@ from .settings import (
     handle_time_callback,
     handle_timezone_callback
 )
+from .admin import reload_practices_command
 
 __all__ = [
     # Start handlers
@@ -33,4 +34,6 @@ __all__ = [
     'timezone_command',
     'handle_time_callback',
     'handle_timezone_callback',
+    # Admin
+    'reload_practices_command',
 ]

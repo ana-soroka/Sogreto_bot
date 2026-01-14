@@ -139,6 +139,10 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_sprouts_appeared(query, user, db)
         elif action == "continue_practice":
             await handle_continue_practice(query, user, db)
+        elif action == "confirm_reset":
+            await handle_confirm_reset(query, user, db)
+        elif action == "cancel_reset":
+            await handle_cancel_reset(query, user, db)
         else:
             await query.edit_message_text(
                 f"Действие '{action}' пока не реализовано.\n"
@@ -413,3 +417,75 @@ async def handle_continue_practice(query, user, db):
     )
 
     logger.info(f"Пользователь {user.telegram_id} продолжил практику: stage={current_stage}, step={step.get('step_id')}")
+
+
+async def handle_confirm_reset(query, user, db):
+    """Подтвердить сброс прогресса и начать заново"""
+    from utils.db import reset_user_progress
+
+    # Сбросить прогресс пользователя
+    reset_user_progress(db, user.telegram_id)
+
+    await query.edit_message_text(
+        "🔄 **Прогресс сброшен!**\n\n"
+        "Вы можете начать практики заново командой /start_practice\n\n"
+        "Начнём сначала! 🌱"
+    )
+
+    logger.info(f"Пользователь {user.telegram_id} подтвердил сброс прогресса")
+
+
+async def handle_cancel_reset(query, user, db):
+    """Отменить сброс и вернуться к текущей практике"""
+    # Получить текущий шаг пользователя
+    current_stage = user.current_stage
+    current_step_id = user.current_step
+
+    # Получить данные этапа
+    stage = practices_manager.get_stage(current_stage)
+    if not stage:
+        await query.edit_message_text(
+            "❌ Сброс отменён.\n\n"
+            f"Не удалось загрузить вашу текущую практику.\n"
+            "Используйте /status для проверки прогресса."
+        )
+        logger.error(f"Не найден этап: stage_id={current_stage}")
+        return
+
+    # Получить данные шага
+    step = practices_manager.get_step(stage_id=current_stage, step_id=current_step_id)
+
+    # Если шаг не найден, взять первый шаг этапа
+    if not step:
+        logger.warning(f"Не найден шаг по step_id={current_step_id}, берем первый шаг этапа {current_stage}")
+        steps = stage.get('steps', [])
+        if steps:
+            step = steps[0]
+            correct_step_id = step.get('step_id')
+            user.current_step = correct_step_id
+            db.commit()
+        else:
+            await query.edit_message_text(
+                "❌ Сброс отменён.\n\n"
+                "Используйте /status для проверки прогресса."
+            )
+            return
+
+    # Сформировать сообщение с текущей практикой
+    message = "✅ **Сброс отменён!**\n\n"
+    message += f"Возвращаемся к вашей практике:\n\n"
+    message += f"**{step.get('title', 'Практика')}**\n\n"
+    message += step.get('message', '')
+
+    # Создать клавиатуру с кнопками
+    buttons = step.get('buttons', [])
+    keyboard = create_practice_keyboard(buttons)
+
+    # Отправить текущую практику
+    await query.edit_message_text(
+        message,
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
+
+    logger.info(f"Пользователь {user.telegram_id} отменил сброс, возврат к практике: stage={current_stage}, step={step.get('step_id')}")

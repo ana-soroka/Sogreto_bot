@@ -39,6 +39,7 @@ from handlers import (
     timezone_command,
     handle_time_callback,
     handle_timezone_callback,
+    reload_practices_command,
 )
 
 # Загрузка переменных окружения
@@ -146,9 +147,12 @@ def main():
     application.add_handler(CommandHandler("set_time", set_time_command))
     application.add_handler(CommandHandler("timezone", timezone_command))
 
+    # Админские команды
+    application.add_handler(CommandHandler("reload_practices", reload_practices_command))
+
     # Обработчик нажатий на кнопки (callback_query)
     # Используем паттерны для разных типов кнопок
-    application.add_handler(CallbackQueryHandler(handle_practice_callback, pattern="^(next_step|complete_stage|show_examples_menu|show_recipes|show_manifesto|start_daily_practices)$"))
+    application.add_handler(CallbackQueryHandler(handle_practice_callback, pattern="^(next_step|complete_stage|show_examples_menu|show_recipes|show_manifesto|start_daily_practices|sprouts_appeared|continue_practice|confirm_reset|cancel_reset)$"))
     application.add_handler(CallbackQueryHandler(handle_time_callback, pattern="^time_"))
     application.add_handler(CallbackQueryHandler(handle_timezone_callback, pattern="^tz_"))
 
