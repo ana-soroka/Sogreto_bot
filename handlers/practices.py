@@ -1,0 +1,312 @@
+"""
+Обработчики команд практик:
+/start_practice и работа с практиками
+"""
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from utils import error_handler, practices_manager
+from utils.db import get_or_create_user, update_user_progress
+from models import SessionLocal
+
+logger = logging.getLogger(__name__)
+
+
+def create_practice_keyboard(buttons_data):
+    """
+    Создать InlineKeyboard из данных кнопок практики
+
+    Args:
+        buttons_data: список словарей с keys 'text' и 'action'
+
+    Returns:
+        InlineKeyboardMarkup с кнопками
+    """
+    keyboard = []
+    for button in buttons_data:
+        callback_data = button.get('action', 'unknown')
+        button_text = button.get('text', 'Продолжить')
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+
+    return InlineKeyboardMarkup(keyboard)
+
+
+@error_handler
+async def start_practice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /start_practice - начать практики"""
+    user_id = update.effective_user.id
+
+    db = SessionLocal()
+    try:
+        # Получить или создать пользователя
+        user = get_or_create_user(
+            db,
+            telegram_id=user_id,
+            username=update.effective_user.username,
+            first_name=update.effective_user.first_name,
+            last_name=update.effective_user.last_name
+        )
+
+        # Проверить, не начаты ли уже практики
+        if user.current_stage > 1 or user.current_step > 1:
+            await update.message.reply_text(
+                f"У вас уже есть активные практики!\n\n"
+                f"📍 Этап: {user.current_stage}\n"
+                f"📝 Шаг: {user.current_step}\n\n"
+                f"Используйте /status чтобы увидеть прогресс.\n"
+                f"Если хотите начать сначала, используйте /reset"
+            )
+            return
+
+        # Получить первый шаг первого этапа (stage_id=1, step_id=1)
+        first_step = practices_manager.get_step(stage_id=1, step_id=1)
+
+        if not first_step:
+            await update.message.reply_text(
+                "😞 Извините, произошла ошибка при загрузке практик.\n"
+                "Пожалуйста, попробуйте позже или свяжитесь с поддержкой: /contact"
+            )
+            logger.error(f"Не удалось загрузить первый шаг практики для пользователя {user_id}")
+            return
+
+        # Обновить прогресс пользователя
+        update_user_progress(db, user_id, stage_id=1, step_id=1, day=1)
+
+        # Установить started_at если это первый раз
+        from datetime import datetime
+        if not user.started_at:
+            user.started_at = datetime.utcnow()
+            db.commit()
+
+        # Сформировать сообщение
+        message = f"**{first_step.get('title', 'Начало практики')}**\n\n"
+        message += first_step.get('message', '')
+
+        # Создать клавиатуру с кнопками
+        buttons = first_step.get('buttons', [])
+        keyboard = create_practice_keyboard(buttons)
+
+        # Отправить практику с кнопками
+        await update.message.reply_text(
+            message,
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+
+        logger.info(f"Пользователь {user_id} начал практики - отправлен шаг 1")
+
+    finally:
+        db.close()
+
+
+@error_handler
+async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обработчик нажатий на кнопки практик (callback_query)
+    """
+    query = update.callback_query
+    await query.answer()  # Подтвердить нажатие кнопки
+
+    user_id = update.effective_user.id
+    action = query.data  # Получить action из callback_data
+
+    logger.info(f"Пользователь {user_id} нажал кнопку: {action}")
+
+    db = SessionLocal()
+    try:
+        user = get_or_create_user(
+            db,
+            telegram_id=user_id,
+            username=update.effective_user.username,
+            first_name=update.effective_user.first_name,
+            last_name=update.effective_user.last_name
+        )
+
+        # Обработать разные действия
+        if action == "next_step":
+            await handle_next_step(query, user, db)
+        elif action == "complete_stage":
+            await handle_complete_stage(query, user, db)
+        elif action == "show_examples_menu":
+            await handle_show_examples(query, user, db)
+        elif action == "show_recipes":
+            await handle_show_recipes(query, user, db)
+        elif action == "show_manifesto":
+            await handle_show_manifesto(query, user, db)
+        elif action == "start_daily_practices":
+            await handle_start_daily_practices(query, user, db)
+        else:
+            await query.edit_message_text(
+                f"Действие '{action}' пока не реализовано.\n"
+                f"Скоро будет добавлено! 🌱"
+            )
+            logger.warning(f"Неизвестное действие: {action}")
+
+    finally:
+        db.close()
+
+
+async def handle_next_step(query, user, db):
+    """Перейти к следующему шагу практики"""
+    current_stage = user.current_stage
+    current_step = user.current_step
+
+    # Получить текущий этап
+    stage = practices_manager.get_stage(current_stage)
+    if not stage:
+        await query.edit_message_text("Ошибка: этап не найден")
+        return
+
+    steps = stage.get('steps', [])
+
+    # Найти следующий шаг
+    next_step_id = current_step + 1
+    next_step = None
+    for step in steps:
+        if step.get('step_id') == next_step_id:
+            next_step = step
+            break
+
+    if next_step:
+        # Обновить прогресс пользователя
+        update_user_progress(db, user.telegram_id, stage_id=current_stage, step_id=next_step_id, day=user.current_day)
+
+        # Сформировать сообщение
+        message = f"**{next_step.get('title', 'Практика')}**\n\n"
+        message += next_step.get('message', '')
+
+        # Создать клавиатуру
+        buttons = next_step.get('buttons', [])
+        keyboard = create_practice_keyboard(buttons)
+
+        # Отправить следующий шаг
+        await query.edit_message_text(
+            message,
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+
+        logger.info(f"Пользователь {user.telegram_id} перешел на шаг {next_step_id} этапа {current_stage}")
+    else:
+        # Шагов больше нет в текущем этапе
+        await query.edit_message_text(
+            f"Этап {current_stage} завершен! 🎉\n\n"
+            f"Следующий этап будет доступен позже.\n"
+            f"Используйте /status чтобы увидеть прогресс."
+        )
+
+
+async def handle_complete_stage(query, user, db):
+    """Завершить текущий этап и перейти к следующему"""
+    current_stage = user.current_stage
+
+    # Перейти к следующему этапу
+    next_stage = current_stage + 1
+
+    # Проверить, существует ли следующий этап
+    stage = practices_manager.get_stage(next_stage)
+
+    if stage:
+        # Обновить прогресс: новый этап, первый шаг
+        update_user_progress(db, user.telegram_id, stage_id=next_stage, step_id=1, day=user.current_day)
+
+        await query.edit_message_text(
+            f"🎉 Этап {current_stage} завершён!\n\n"
+            f"Переходим к этапу {next_stage}: **{stage.get('stage_name', 'Следующий этап')}**\n\n"
+            f"Следующая практика придёт позже (автоматические напоминания будут реализованы на следующем этапе).\n\n"
+            f"Используйте /status чтобы увидеть прогресс."
+        )
+        logger.info(f"Пользователь {user.telegram_id} завершил этап {current_stage}, переход на этап {next_stage}")
+    else:
+        # Практики закончились
+        await query.edit_message_text(
+            f"🎊 **ПОЗДРАВЛЯЕМ!** 🎊\n\n"
+            f"Вы завершили все практики предвкушения!\n\n"
+            f"Вы прошли путь от семечка до урожая. 🌱\n\n"
+            f"Используйте /status чтобы увидеть итоги."
+        )
+        logger.info(f"Пользователь {user.telegram_id} завершил ВСЕ практики!")
+
+
+async def handle_show_examples(query, user, db):
+    """Показать примеры желаний"""
+    examples = practices_manager.get_examples_menu()
+
+    message = "**Примеры желаний** 🎯\n\n"
+    message += examples.get('message', '') + "\n\n"
+
+    categories = examples.get('categories', [])
+    for category in categories:
+        message += f"\n**{category.get('title', '')}**\n"
+        message += f"_{category.get('description', '')}_\n\n"
+
+        for item in category.get('items', [])[:3]:  # Показать первые 3
+            message += f"• {item}\n"
+
+        message += "\n"
+
+    # Добавить кнопку "Продолжить практику"
+    keyboard = [[InlineKeyboardButton("Продолжить практику", callback_data="next_step")]]
+
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
+
+async def handle_show_recipes(query, user, db):
+    """Показать рецепты с микрозеленью"""
+    recipes = practices_manager.get_recipes()
+
+    message = f"**{recipes.get('title', 'Рецепты')}** 🍽\n\n"
+    message += recipes.get('message', '') + "\n\n"
+
+    items = recipes.get('items', [])
+    for recipe in items[:3]:  # Показать первые 3 рецепта
+        message += f"\n{recipe.get('title', '')}\n"
+        message += f"_{recipe.get('subtitle', '')}_\n\n"
+        message += f"**Ингредиенты:** {recipe.get('ingredients', '')}\n"
+        message += f"**Приготовление:** {recipe.get('instructions', '')}\n"
+
+        if recipe.get('secret'):
+            message += f"💡 {recipe.get('secret')}\n"
+
+        message += "\n"
+
+    # Кнопка завершения этапа
+    keyboard = [[InlineKeyboardButton("Завершить этап", callback_data="complete_stage")]]
+
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
+
+async def handle_show_manifesto(query, user, db):
+    """Показать Манифест Предвкушения"""
+    manifesto = practices_manager.get_manifesto()
+
+    message = f"**{manifesto.get('title', 'Манифест')}**\n\n"
+    message += manifesto.get('message', '') + "\n\n"
+
+    principles = manifesto.get('principles', [])
+    for principle in principles:
+        message += f"\n**{principle.get('number')}.**\n{principle.get('text', '')}\n"
+
+    message += f"\n\n{manifesto.get('closing', '')}"
+
+    await query.edit_message_text(message, parse_mode='Markdown')
+    logger.info(f"Пользователь {user.telegram_id} получил Манифест Предвкушения")
+
+
+async def handle_start_daily_practices(query, user, db):
+    """Начать ежедневные практики (этап 5)"""
+    # TODO: Реализовать ежедневные практики на следующем этапе
+    await query.edit_message_text(
+        "📅 **Ежедневные практики**\n\n"
+        "Функция ежедневных практик будет реализована на следующем этапе разработки.\n\n"
+        "Пока используйте /status для отслеживания прогресса."
+    )
+    logger.info(f"Пользователь {user.telegram_id} попытался начать ежедневные практики")
