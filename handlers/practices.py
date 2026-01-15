@@ -266,7 +266,7 @@ async def handle_daily_choice_B(query, user, db, context):
 async def _send_response_substep(query, user, db, context, substep_id):
     """
     Отправить ответный подшаг (response_A или response_B)
-    Автоматически перейти к завершению через 3 сек
+    Показать с кнопками из JSON
     """
     current_day = user.daily_practice_day
     stage = practices_manager.get_stage(3)
@@ -287,23 +287,10 @@ async def _send_response_substep(query, user, db, context, substep_id):
         await query.edit_message_text("Ошибка: подшаг не найден")
         return
 
-    # Отправить сообщение
-    message = substep.get('message', '')
-    await query.edit_message_text(message, parse_mode='Markdown')
+    # Отправить сообщение с кнопками
+    await _send_substep_message(query, substep)
 
-    # Автоматически перейти к финальному шагу
-    await asyncio.sleep(3)
-
-    user.daily_practice_substep = "completion"
-    db.commit()
-
-    final_substep = _get_substep_by_id(daily_practice, "completion")
-    if not final_substep:
-        logger.error(f"Подшаг 'completion' не найден для дня {current_day}")
-        await query.edit_message_text("Ошибка: подшаг завершения не найден")
-        return
-
-    await _complete_daily_practice_flow(query, user, db, final_substep)
+    logger.info(f"Пользователь {user.telegram_id} получил response substep {substep_id}")
 
 
 async def _complete_daily_practice_flow(query, user, db, final_substep):
