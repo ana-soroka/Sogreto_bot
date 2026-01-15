@@ -125,10 +125,26 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
         # Обработать разные действия
         if action == "next_step":
             await handle_next_step(query, user, db)
+        elif action == "prev_step":
+            await handle_prev_step(query, user, db)
         elif action == "complete_stage":
             await handle_complete_stage(query, user, db)
         elif action == "show_examples_menu":
+            # Сбросить состояние при входе в меню
+            context.user_data['opened_categories'] = set()
             await handle_show_examples(query, user, db)
+        elif action.startswith("toggle_category_"):
+            # Извлечь ID категории из callback_data
+            category_id = action.replace("toggle_category_", "")
+            # Получить или создать set открытых категорий
+            if 'opened_categories' not in context.user_data:
+                context.user_data['opened_categories'] = set()
+            opened_categories = context.user_data['opened_categories']
+            await handle_category_toggle(query, user, db, category_id, opened_categories)
+        elif action == "continue_from_examples":
+            # Очистить состояние и вернуться к практике
+            context.user_data.pop('opened_categories', None)
+            await handle_next_step(query, user, db)
         elif action == "show_recipes":
             await handle_show_recipes(query, user, db)
         elif action == "show_manifesto":
@@ -204,6 +220,56 @@ async def handle_next_step(query, user, db):
         )
 
 
+async def handle_prev_step(query, user, db):
+    """Вернуться к предыдущему шагу практики"""
+    current_stage = user.current_stage
+    current_step = user.current_step
+
+    # Нельзя вернуться назад с первого шага
+    if current_step <= 1:
+        await query.answer("Это первый шаг, вернуться назад нельзя.", show_alert=True)
+        return
+
+    # Получить текущий этап
+    stage = practices_manager.get_stage(current_stage)
+    if not stage:
+        await query.edit_message_text("Ошибка: этап не найден")
+        return
+
+    steps = stage.get('steps', [])
+
+    # Найти предыдущий шаг
+    prev_step_id = current_step - 1
+    prev_step = None
+    for step in steps:
+        if step.get('step_id') == prev_step_id:
+            prev_step = step
+            break
+
+    if prev_step:
+        # Обновить прогресс пользователя
+        update_user_progress(db, user.telegram_id, stage_id=current_stage, step_id=prev_step_id, day=user.current_day)
+
+        # Сформировать сообщение
+        message = f"**{prev_step.get('title', 'Практика')}**\n\n"
+        message += prev_step.get('message', '')
+
+        # Создать клавиатуру
+        buttons = prev_step.get('buttons', [])
+        keyboard = create_practice_keyboard(buttons)
+
+        # Отправить предыдущий шаг
+        await query.edit_message_text(
+            message,
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+
+        logger.info(f"Пользователь {user.telegram_id} вернулся на шаг {prev_step_id} этапа {current_stage}")
+    else:
+        await query.edit_message_text("Ошибка: предыдущий шаг не найден")
+
+
 async def handle_complete_stage(query, user, db):
     """Завершить текущий этап и перейти к следующему"""
     current_stage = user.current_stage
@@ -236,31 +302,64 @@ async def handle_complete_stage(query, user, db):
         logger.info(f"Пользователь {user.telegram_id} завершил ВСЕ практики!")
 
 
-async def handle_show_examples(query, user, db):
-    """Показать примеры желаний"""
+async def handle_show_examples(query, user, db, opened_categories=None):
+    """Показать примеры желаний с аккордеоном
+
+    Args:
+        opened_categories: set строк с id открытых категорий
+    """
+    if opened_categories is None:
+        opened_categories = set()
+
     examples = practices_manager.get_examples_menu()
 
-    message = "**Примеры желаний** 🎯\n\n"
+    message = f"**{examples.get('title', 'Примеры желаний')}**\n\n"
     message += examples.get('message', '') + "\n\n"
 
     categories = examples.get('categories', [])
+    keyboard = []
+
+    # Создаём кнопки для каждой категории
     for category in categories:
-        message += f"\n**{category.get('title', '')}**\n"
-        message += f"_{category.get('description', '')}_\n\n"
+        cat_id = category.get('id', '')
+        is_open = cat_id in opened_categories
 
-        for item in category.get('items', [])[:3]:  # Показать первые 3
-            message += f"• {item}\n"
+        # Иконка стрелки: вниз если открыто, вправо если закрыто
+        arrow = "🔽" if is_open else "▶️"
+        button_text = f"{arrow} {category.get('title', '')}"
 
-        message += "\n"
+        # Кнопка переключения категории
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"toggle_category_{cat_id}")])
 
-    # Добавить кнопку "Продолжить практику"
-    keyboard = [[InlineKeyboardButton("Продолжить практику", callback_data="next_step")]]
+        # Если категория открыта, добавляем её содержимое в сообщение
+        if is_open:
+            message += f"\n**{category.get('title', '')}**\n"
+            message += f"_{category.get('description', '')}_\n\n"
+
+            for item in category.get('items', []):
+                message += f"• {item}\n"
+
+            message += "\n"
+
+    # Кнопка "Продолжить практику"
+    keyboard.append([InlineKeyboardButton("✅ Продолжить практику", callback_data="continue_from_examples")])
 
     await query.edit_message_text(
         message,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
+
+
+async def handle_category_toggle(query, user, db, category_id, opened_categories):
+    """Переключить состояние категории (открыть/закрыть)"""
+    if category_id in opened_categories:
+        opened_categories.remove(category_id)
+    else:
+        opened_categories.add(category_id)
+
+    # Перерисовать меню с обновлённым состоянием
+    await handle_show_examples(query, user, db, opened_categories)
 
 
 async def handle_show_recipes(query, user, db):
