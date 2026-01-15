@@ -9,7 +9,7 @@ from telegram.ext import ContextTypes
 from utils import error_handler, practices_manager
 from utils.db import get_or_create_user, update_user_progress
 from models import SessionLocal, User
-from handlers.admin import is_admin
+from handlers.admin import is_admin, ADMIN_IDS
 from utils.scheduler import send_daily_practice_reminder
 
 logger = logging.getLogger(__name__)
@@ -316,15 +316,22 @@ async def _complete_daily_practice_flow(query, user, db, final_substep):
     # Проверить, был ли это последний день
     if current_day >= 4:
         # Переход к Stage 4
+        from datetime import timedelta
+
         update_user_progress(db, user.telegram_id, stage_id=4, step_id=12, day=user.current_day)
         user.daily_practice_day = 0
         user.daily_practice_substep = ""
         user.last_practice_date = None
         user.reminder_postponed = False
         user.postponed_until = None
+
+        # Установить напоминание о Stage 4 на завтра
+        tomorrow = (date.today() + timedelta(days=1)).strftime('%Y-%m-%d')
+        user.stage4_reminder_date = tomorrow
+
         db.commit()
 
-        logger.info(f"Пользователь {user.telegram_id} завершил все ежедневные практики, переход к этапу 4")
+        logger.info(f"Пользователь {user.telegram_id} завершил все ежедневные практики, переход к этапу 4. Напоминание установлено на {tomorrow}")
         return
 
     # Обычное завершение дня
@@ -385,7 +392,17 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             context.user_data.pop('opened_categories', None)
             await handle_next_step(query, user, db)
         elif action == "show_recipes":
-            await handle_show_recipes(query, user, db)
+            # Сбросить состояние при входе в меню рецептов
+            context.user_data['opened_recipes'] = set()
+            await handle_show_recipes(query, user, db, context)
+        elif action.startswith("expand_recipe_") or action.startswith("collapse_recipe_"):
+            # Извлечь ID рецепта из callback_data
+            recipe_id = action.replace("expand_recipe_", "").replace("collapse_recipe_", "")
+            # Получить или создать set открытых рецептов
+            if 'opened_recipes' not in context.user_data:
+                context.user_data['opened_recipes'] = set()
+            opened_recipes = context.user_data['opened_recipes']
+            await handle_recipe_toggle(query, user, db, recipe_id, opened_recipes, context)
         elif action == "start_waiting_for_daily":
             await handle_start_waiting_for_daily(query, user, db)
         elif action == "complete_daily_practice":
@@ -410,8 +427,6 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_start_practice_after_reset(query, user, db)
         elif action == "test_daily_reminder":
             await handle_test_daily_reminder(query, user, db, context)
-        elif action == "test_day5_reminder":
-            await handle_test_day5_reminder(query, user, db, context)
         elif action == "start_daily_substep":
             await handle_start_daily_substep(query, user, db)
         elif action == "next_daily_substep":
@@ -420,6 +435,10 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_daily_choice_A(query, user, db, context)
         elif action == "daily_choice_B":
             await handle_daily_choice_B(query, user, db, context)
+        elif action == "complete_day4_practice":
+            await handle_complete_day4_practice(query, user, db, context)
+        elif action == "test_stage4_reminder":
+            await handle_test_stage4_reminder(query, user, db, context)
         else:
             await query.edit_message_text(
                 f"Действие '{action}' пока не реализовано.\n"
@@ -738,33 +757,104 @@ async def handle_category_toggle(query, user, db, category_id, opened_categories
     await handle_show_examples(query, user, db, opened_categories)
 
 
-async def handle_show_recipes(query, user, db):
-    """Показать рецепты с микрозеленью"""
+async def handle_show_recipes(query, user, db, context=None, opened_recipes=None):
+    """
+    Показать рецепты с микрозеленью в виде разворачивающихся кнопок
+
+    Args:
+        query: CallbackQuery объект
+        user: User объект из БД
+        db: Database session
+        context: CallbackContext для хранения состояния
+        opened_recipes: Set[str] - множество ID развернутых рецептов (опционально)
+    """
     recipes = practices_manager.get_recipes()
 
+    # Получить состояние развернутых рецептов
+    if opened_recipes is None:
+        if context and hasattr(context, 'user_data'):
+            opened_recipes = context.user_data.get('opened_recipes', set())
+        else:
+            opened_recipes = set()
+
+    # Формируем сообщение
     message = f"**{recipes.get('title', 'Рецепты')}** 🍽\n\n"
-    message += recipes.get('message', '') + "\n\n"
+    message += recipes.get('message', '')
 
     items = recipes.get('items', [])
-    for recipe in items[:3]:  # Показать первые 3 рецепта
-        message += f"\n{recipe.get('title', '')}\n"
-        message += f"_{recipe.get('subtitle', '')}_\n\n"
-        message += f"**Ингредиенты:** {recipe.get('ingredients', '')}\n"
-        message += f"**Приготовление:** {recipe.get('instructions', '')}\n"
 
-        if recipe.get('secret'):
-            message += f"💡 {recipe.get('secret')}\n"
+    # Добавляем развернутые рецепты в текст сообщения
+    for recipe in items:
+        recipe_id = recipe.get('id', '')
+        if recipe_id in opened_recipes:
+            message += f"\n\n**{recipe.get('title', '')}**\n"
+            message += f"_{recipe.get('subtitle', '')}_\n\n"
+            message += f"**Ингредиенты:** {recipe.get('ingredients', '')}\n"
+            message += f"**Как делать:** {recipe.get('instructions', '')}\n"
 
-        message += "\n"
+            if recipe.get('secret'):
+                message += f"**В чём секрет:** {recipe.get('secret')}\n"
 
-    # Кнопка завершения этапа
-    keyboard = [[InlineKeyboardButton("Завершить этап", callback_data="complete_stage")]]
+            if recipe.get('meaning'):
+                message += f"**Смысл:** {recipe.get('meaning')}\n"
+
+    # Создаем кнопки для всех рецептов
+    keyboard = []
+    for recipe in items:
+        recipe_id = recipe.get('id', '')
+        title = recipe.get('title', '')
+
+        # Кнопка для сворачивания или разворачивания
+        if recipe_id in opened_recipes:
+            # Рецепт развернут - кнопка для сворачивания
+            button_text = f"▼ {title}"
+            callback_data = f"collapse_recipe_{recipe_id}"
+        else:
+            # Рецепт свернут - кнопка для разворачивания
+            button_text = title
+            callback_data = f"expand_recipe_{recipe_id}"
+
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+
+    # Добавляем кнопку завершения (если все рецепты развернуты хотя бы один раз)
+    # Или всегда показываем кнопку завершения
+    keyboard.append([InlineKeyboardButton("✅ Завершить практику", callback_data="next_daily_substep")])
 
     await query.edit_message_text(
         message,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
+
+    logger.info(f"Пользователь {user.telegram_id} просматривает меню рецептов (развернуто: {opened_recipes})")
+
+
+async def handle_recipe_toggle(query, user, db, recipe_id, opened_recipes, context):
+    """
+    Переключить состояние рецепта (развернуть/свернуть)
+
+    Args:
+        query: CallbackQuery объект
+        user: User объект из БД
+        db: Database session
+        recipe_id: str - ID рецепта для переключения
+        opened_recipes: Set[str] - множество ID развернутых рецептов
+        context: CallbackContext для хранения состояния
+    """
+    # Переключить состояние рецепта
+    if recipe_id in opened_recipes:
+        opened_recipes.remove(recipe_id)
+        logger.info(f"Пользователь {user.telegram_id} свернул рецепт {recipe_id}")
+    else:
+        opened_recipes.add(recipe_id)
+        logger.info(f"Пользователь {user.telegram_id} развернул рецепт {recipe_id}")
+
+    # Сохранить состояние в context
+    if context and hasattr(context, 'user_data'):
+        context.user_data['opened_recipes'] = opened_recipes
+
+    # Перерисовать меню с обновлённым состоянием
+    await handle_show_recipes(query, user, db, context, opened_recipes)
 
 
 async def handle_show_manifesto(query, user, db):
@@ -1195,17 +1285,28 @@ async def handle_test_daily_reminder(query, user, db, context):
         logger.error(f"Ошибка при отправке тестового напоминания для админа {user.telegram_id}: {e}")
 
 
-async def handle_test_day5_reminder(query, user, db, context):
+async def handle_complete_day4_practice(query, user, db, context):
     """
-    Админская функция: отправить тестовое напоминание о дне 5 (практика Якорь)
+    Завершить практику дня 4 (переход к Stage 4)
     """
-    # Проверка прав администратора
-    if not is_admin(user.telegram_id):
-        await query.answer("⛔ Эта функция доступна только администраторам", show_alert=True)
-        logger.warning(f"Пользователь {user.telegram_id} попытался использовать test_day5_reminder без прав")
-        return
+    await _complete_daily_practice_flow(query, user, db, {
+        "message": "Переход к этапу 4..."
+    }, context)
+    logger.info(f"Пользователь {user.telegram_id} завершил день 4, переход к Stage 4")
+
+
+async def handle_test_stage4_reminder(query, user, db, context):
+    """
+    Тестовая кнопка для администратора: отправить тестовое напоминание о Stage 4
+    """
+    from utils.scheduler import send_stage4_reminder
 
     try:
+        # Проверить права администратора
+        if user.telegram_id not in ADMIN_IDS:
+            await query.answer("⛔ Эта функция доступна только администраторам", show_alert=True)
+            return
+
         # Получить данные пользователя из БД
         db_user = db.query(User).filter(User.telegram_id == user.telegram_id).first()
 
@@ -1213,17 +1314,14 @@ async def handle_test_day5_reminder(query, user, db, context):
             await query.answer("❌ Ошибка: пользователь не найден в БД", show_alert=True)
             return
 
-        # Установить daily_practice_day = 5 для теста дня 5
-        db_user.daily_practice_day = 5
-        db.commit()
-        logger.info(f"Установлен daily_practice_day=5 для пользователя {user.telegram_id} (тест-напоминание день 5)")
+        # Отправить тестовое напоминание о Stage 4
+        await send_stage4_reminder(context.bot, db_user, db)
 
-        # Отправить тестовое напоминание для дня 5
-        await send_daily_practice_reminder(context.bot, db_user, db)
-
-        await query.answer("✅ Тестовое напоминание (день 5) отправлено!", show_alert=True)
-        logger.info(f"Администратор {user.telegram_id} отправил себе тестовое напоминание о дне 5")
+        await query.answer("✅ Тестовое напоминание о Stage 4 отправлено!", show_alert=True)
+        logger.info(f"Администратор {user.telegram_id} отправил себе тестовое напоминание о Stage 4")
 
     except Exception as e:
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
-        logger.error(f"Ошибка при отправке тестового напоминания дня 5 для админа {user.telegram_id}: {e}")
+        logger.error(f"Ошибка при отправке тестового напоминания Stage 4 для админа {user.telegram_id}: {e}")
+
+

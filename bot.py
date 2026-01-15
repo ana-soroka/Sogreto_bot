@@ -41,6 +41,8 @@ from handlers import (
     handle_timezone_callback,
     reload_practices_command,
 )
+from handlers.admin import admin_test_command
+from handlers.admin_test import handle_admin_test_callback
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -149,10 +151,12 @@ def main():
 
     # Админские команды
     application.add_handler(CommandHandler("reload_practices", reload_practices_command))
+    application.add_handler(CommandHandler("admin_test", admin_test_command))
 
     # Обработчик нажатий на кнопки (callback_query)
     # Используем паттерны для разных типов кнопок
-    application.add_handler(CallbackQueryHandler(handle_practice_callback, pattern="^(next_step|prev_step|complete_stage|show_examples_menu|toggle_category_.*|continue_from_examples|show_recipes|show_manifesto|start_daily_practices|sprouts_appeared|continue_practice|confirm_reset|cancel_reset|test_daily_reminder|test_day5_reminder|start_daily_substep|next_daily_substep|daily_choice_A|daily_choice_B|postpone_reminder|start_waiting_for_daily)$"))
+    application.add_handler(CallbackQueryHandler(handle_practice_callback, pattern="^(next_step|prev_step|complete_stage|show_examples_menu|toggle_category_.*|continue_from_examples|show_recipes|expand_recipe_.*|collapse_recipe_.*|show_manifesto|start_daily_practices|sprouts_appeared|continue_practice|confirm_reset|cancel_reset|test_daily_reminder|start_daily_substep|next_daily_substep|daily_choice_A|daily_choice_B|complete_day4_practice|test_stage4_reminder|postpone_reminder|start_waiting_for_daily)$"))
+    application.add_handler(CallbackQueryHandler(handle_admin_test_callback, pattern="^(admin_test_day[1-4]|admin_test_stage4|admin_refresh_status)$"))
     application.add_handler(CallbackQueryHandler(handle_time_callback, pattern="^time_"))
     application.add_handler(CallbackQueryHandler(handle_timezone_callback, pattern="^tz_"))
 
