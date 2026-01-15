@@ -269,11 +269,71 @@ async def send_practice_reminder(bot: Bot, user_id: int):
         db.close()
 
 
+async def send_daily_practice_reminder(bot: Bot, user, db):
+    """
+    Отправить напоминание о ежедневной практике (Stage 3)
+
+    Args:
+        bot: Telegram Bot instance
+        user: объект User из БД
+        db: сессия БД
+    """
+    try:
+        current_day = user.daily_practice_day
+
+        # Получить практику текущего дня
+        stage = practices_manager.get_stage(3)
+        if not stage:
+            logger.error("Этап 3 не найден в practices.json")
+            return
+
+        daily_practices = stage.get('daily_practices', [])
+        practice = None
+        for p in daily_practices:
+            if p.get('day') == current_day:
+                practice = p
+                break
+
+        if not practice:
+            logger.error(f"Практика дня {current_day} не найдена в этапе 3")
+            return
+
+        # Сформировать сообщение
+        message = f"**{practice.get('title', 'Практика')}**\n\n"
+        message += practice.get('message', '')
+
+        # Создать клавиатуру
+        buttons = practice.get('buttons', [])
+        keyboard_buttons = []
+        for button in buttons:
+            text = button.get('text', '')
+            action = button.get('action', '')
+            if text and action:
+                keyboard_buttons.append([InlineKeyboardButton(text, callback_data=action)])
+
+        keyboard = InlineKeyboardMarkup(keyboard_buttons) if keyboard_buttons else None
+
+        # Отправить сообщение
+        await bot.send_message(
+            chat_id=user.telegram_id,
+            text=message,
+            parse_mode='Markdown',
+            reply_markup=keyboard
+        )
+
+        logger.info(f"Отправлено напоминание о ежедневной практике дня {current_day} пользователю {user.telegram_id}")
+
+    except Exception as e:
+        logger.error(f"Ошибка при отправке ежедневной практики пользователю {user.telegram_id}: {e}")
+
+
 async def check_and_send_reminders(bot: Bot):
     """
     Проверить всех пользователей и отправить напоминания тем, кому нужно
     Эта функция вызывается планировщиком каждый час
     """
+    from datetime import date as date_class
+
     db = SessionLocal()
     try:
         # Получить текущее время в UTC
@@ -305,7 +365,44 @@ async def check_and_send_reminders(bot: Bot):
 
                     # Если текущее время совпадает с preferred_time (с точностью до часа)
                     if current_hour == hour and 0 <= current_minute < 30:
-                        # Проверить, не отправляли ли уже сегодня
+                        # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЕЖЕДНЕВНЫХ ПРАКТИК ЭТАПА 3
+                        if user.current_stage == 3 and user.daily_practice_day == 0:
+                            # Пользователь в режиме ожидания, нужно начать первую практику
+                            user.daily_practice_day = 1
+                            db.commit()
+
+                            # Отправить первую ежедневную практику
+                            await send_daily_practice_reminder(bot, user, db)
+
+                            # Обновить время последнего напоминания
+                            user.last_reminder_sent = now_utc
+                            db.commit()
+                            continue
+
+                        if user.current_stage == 3 and user.daily_practice_day >= 1:
+                            # Проверить, не выполнена ли уже практика сегодня
+                            today_str = now_user_tz.date().strftime('%Y-%m-%d')
+
+                            if user.last_practice_date == today_str:
+                                logger.debug(f"Пользователь {user.telegram_id} уже выполнил практику сегодня")
+                                continue
+
+                            # Проверить отложенное напоминание
+                            if user.reminder_postponed and user.postponed_until:
+                                # Если время ещё не пришло, пропускаем
+                                if now_utc < user.postponed_until:
+                                    logger.debug(f"Напоминание для пользователя {user.telegram_id} отложено до {user.postponed_until}")
+                                    continue
+
+                            # Отправить ежедневную практику
+                            await send_daily_practice_reminder(bot, user, db)
+
+                            # Обновить время последнего напоминания
+                            user.last_reminder_sent = now_utc
+                            db.commit()
+                            continue
+
+                        # Проверить, не отправляли ли уже сегодня (для обычных напоминаний)
                         if user.last_reminder_sent:
                             last_reminder_date = user.last_reminder_sent.date()
                             today = now_user_tz.date()

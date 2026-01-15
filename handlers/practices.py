@@ -147,6 +147,14 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_next_step(query, user, db)
         elif action == "show_recipes":
             await handle_show_recipes(query, user, db)
+        elif action == "start_waiting_for_daily":
+            await handle_start_waiting_for_daily(query, user, db)
+        elif action == "complete_daily_practice":
+            await handle_complete_daily_practice(query, user, db)
+        elif action == "postpone_reminder":
+            await handle_postpone_reminder(query, user, db)
+        elif action == "view_daily_practice":
+            await handle_view_daily_practice(query, user, db)
         elif action == "show_manifesto":
             await handle_show_manifesto(query, user, db)
         elif action == "start_daily_practices":
@@ -301,6 +309,40 @@ async def handle_complete_stage(query, user, db):
             parse_mode='Markdown'
         )
         logger.info(f"Пользователь {user.telegram_id} завершил этап 1, ожидает всходы")
+        return
+
+    # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЭТАПА 2: переход к ежедневным практикам этапа 3
+    if current_stage == 2:
+        # Перейти на этап 3, шаг 0 (переходное сообщение)
+        update_user_progress(db, user.telegram_id, stage_id=3, step_id=0, day=user.current_day)
+
+        # Получить переходное сообщение (step_id=0) из этапа 3
+        stage = practices_manager.get_stage(3)
+        if stage:
+            steps = stage.get('steps', [])
+            transition_step = None
+            for step in steps:
+                if step.get('step_id') == 0:
+                    transition_step = step
+                    break
+
+            if transition_step:
+                message = f"**{transition_step.get('title', 'Переход')}**\n\n"
+                message += transition_step.get('message', '')
+
+                buttons = transition_step.get('buttons', [])
+                keyboard = create_practice_keyboard(buttons)
+
+                await query.edit_message_text(
+                    message,
+                    reply_markup=keyboard,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"Пользователь {user.telegram_id} завершил этап 2, переход к ежедневным практикам")
+                return
+
+        # Fallback если не нашли переходный шаг
+        await query.edit_message_text("Ошибка: переходное сообщение этапа 3 не найдено")
         return
 
     # Перейти к следующему этапу
@@ -742,3 +784,114 @@ async def handle_cancel_reset(query, user, db):
     )
 
     logger.info(f"Пользователь {user.telegram_id} отменил сброс, возврат к практике: stage={current_stage}, step={step.get('step_id')}")
+
+
+async def handle_start_waiting_for_daily(query, user, db):
+    """Начать ожидание ежедневных практик"""
+    # Установить режим ожидания ежедневных практик
+    user.daily_practice_day = 0  # 0 = ожидание первой практики
+    db.commit()
+
+    await query.edit_message_text(
+        "✅ Отлично! Я буду присылать напоминания о практиках.\n\n"
+        "Первое напоминание придёт в твоё предпочтительное время.\n\n"
+        "🌱 До встречи на практике!",
+        parse_mode='Markdown'
+    )
+    logger.info(f"Пользователь {user.telegram_id} начал ожидание ежедневных практик")
+
+
+async def handle_complete_daily_practice(query, user, db):
+    """Завершить ежедневную практику"""
+    from datetime import date
+
+    current_day = user.daily_practice_day
+
+    # Если это была последняя ежедневная практика (день 4)
+    if current_day >= 4:
+        # Переходим к этапу 4 (день 7 - первый урожай), шаг 12
+        update_user_progress(db, user.telegram_id, stage_id=4, step_id=12, day=user.current_day)
+        user.daily_practice_day = 0
+        user.last_practice_date = None
+        user.reminder_postponed = False
+        user.postponed_until = None
+        db.commit()
+
+        await query.edit_message_text(
+            "🎉 **Все 4 дня практик «Свидетель» завершены!**\n\n"
+            "Отличная работа! Ты освоил(а) навык не-вмешательства.\n\n"
+            "Скоро мы перейдём к практике первого урожая!\n\n"
+            "Используйте /continue_practice для продолжения.",
+            parse_mode='Markdown'
+        )
+        logger.info(f"Пользователь {user.telegram_id} завершил все ежедневные практики, переход к этапу 4")
+    else:
+        # Увеличить счётчик дня и сохранить дату
+        user.daily_practice_day = current_day + 1
+        user.last_practice_date = date.today().strftime('%Y-%m-%d')
+        user.reminder_postponed = False
+        user.postponed_until = None
+        db.commit()
+
+        await query.edit_message_text(
+            f"✅ **Практика дня {current_day} завершена!**\n\n"
+            f"Молодец! Ты сделал(а) ещё один шаг в развитии навыка наблюдения.\n\n"
+            f"До встречи завтра! 🌱",
+            parse_mode='Markdown'
+        )
+        logger.info(f"Пользователь {user.telegram_id} завершил практику дня {current_day}, переход к дню {current_day + 1}")
+
+
+async def handle_postpone_reminder(query, user, db):
+    """Отложить напоминание на 2 часа"""
+    from datetime import datetime, timedelta
+
+    postponed_time = datetime.now() + timedelta(hours=2)
+    user.reminder_postponed = True
+    user.postponed_until = postponed_time
+    db.commit()
+
+    await query.edit_message_text(
+        f"⏰ **Напоминание отложено**\n\n"
+        f"Я напомню тебе о практике через 2 часа.\n\n"
+        f"Время напоминания: {postponed_time.strftime('%H:%M')}\n\n"
+        f"До встречи! 🌱",
+        parse_mode='Markdown'
+    )
+    logger.info(f"Пользователь {user.telegram_id} отложил напоминание до {postponed_time}")
+
+
+async def handle_view_daily_practice(query, user, db):
+    """Показать текущую ежедневную практику (для кнопки 'Назад')"""
+    current_day = user.daily_practice_day
+
+    # Получить практику текущего дня
+    stage = practices_manager.get_stage(3)
+    if not stage:
+        await query.edit_message_text("Ошибка: этап 3 не найден")
+        return
+
+    daily_practices = stage.get('daily_practices', [])
+    practice = None
+    for p in daily_practices:
+        if p.get('day') == current_day:
+            practice = p
+            break
+
+    if not practice:
+        await query.edit_message_text(f"Ошибка: практика дня {current_day} не найдена")
+        return
+
+    # Показать практику
+    message = f"**{practice.get('title', 'Практика')}**\n\n"
+    message += practice.get('message', '')
+
+    buttons = practice.get('buttons', [])
+    keyboard = create_practice_keyboard(buttons)
+
+    await query.edit_message_text(
+        message,
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
+    logger.info(f"Пользователь {user.telegram_id} вернулся к практике дня {current_day}")

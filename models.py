@@ -44,6 +44,12 @@ class User(Base):
     is_paused = Column(Boolean, default=False)
     awaiting_sprouts = Column(Boolean, default=False)  # Ожидание всходов после этапа 1
 
+    # Ежедневные практики (Stage 3)
+    daily_practice_day = Column(Integer, default=0)  # 0 = ожидание, 1-4 = дни практик
+    last_practice_date = Column(String(10), nullable=True)  # YYYY-MM-DD формат
+    reminder_postponed = Column(Boolean, default=False)  # Напоминание отложено
+    postponed_until = Column(DateTime, nullable=True)  # Время отложенного напоминания
+
     # Настройки
     timezone = Column(String(50), default='Europe/Moscow')
     reminder_time = Column(String(5), default='09:00')  # Старое поле (deprecated)
