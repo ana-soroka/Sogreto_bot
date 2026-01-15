@@ -274,6 +274,33 @@ async def handle_complete_stage(query, user, db):
     """Завершить текущий этап и перейти к следующему"""
     current_stage = user.current_stage
 
+    # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЭТАПА 1: не переходим сразу на этап 2
+    if current_stage == 1:
+        # Установить флаг ожидания всходов
+        user.awaiting_sprouts = True
+        db.commit()
+
+        # Показать сообщение с кнопкой
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🌱 Появились первые всходы!", callback_data="sprouts_appeared")]
+        ])
+
+        await query.edit_message_text(
+            f"🎉 **Этап 1 завершён!**\n\n"
+            f"Отличная работа! Семена посажены, и теперь начинается самое волнующее — ожидание.\n\n"
+            f"Обычно первые всходы появляются через **2-4 дня**.\n\n"
+            f"💡 **Что делать:**\n"
+            f"• Проверяй горшок каждый день\n"
+            f"• Следи за влажностью почвы\n"
+            f"• Держи горшок под плёнкой\n\n"
+            f"Как только увидишь первые зелёные петельки — нажми кнопку ниже, и мы продолжим! 🌱\n\n"
+            f"_Я буду присылать напоминания проверить всходы._",
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+        logger.info(f"Пользователь {user.telegram_id} завершил этап 1, ожидает всходы")
+        return
+
     # Перейти к следующему этапу
     next_stage = current_stage + 1
 
@@ -300,6 +327,48 @@ async def handle_complete_stage(query, user, db):
             f"Используйте /status чтобы увидеть итоги."
         )
         logger.info(f"Пользователь {user.telegram_id} завершил ВСЕ практики!")
+
+
+async def handle_sprouts_appeared(query, user, db):
+    """Обработать нажатие кнопки 'Появились первые всходы'"""
+    # Сбросить флаг ожидания всходов
+    user.awaiting_sprouts = False
+
+    # Перейти на этап 2
+    update_user_progress(db, user.telegram_id, stage_id=2, step_id=1, day=user.current_day)
+
+    # Получить первый шаг этапа 2
+    stage = practices_manager.get_stage(2)
+    if not stage:
+        await query.edit_message_text("Ошибка: этап 2 не найден")
+        return
+
+    steps = stage.get('steps', [])
+    first_step = None
+    for step in steps:
+        if step.get('step_id') == 1:
+            first_step = step
+            break
+
+    if first_step:
+        # Сформировать сообщение
+        message = f"**{first_step.get('title', 'Практика')}**\n\n"
+        message += first_step.get('message', '')
+
+        # Создать клавиатуру
+        buttons = first_step.get('buttons', [])
+        keyboard = create_practice_keyboard(buttons)
+
+        # Отправить первый шаг
+        await query.edit_message_text(
+            message,
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+
+        logger.info(f"Пользователь {user.telegram_id} сообщил о всходах, переход на этап 2")
+    else:
+        await query.edit_message_text("Ошибка: первый шаг этапа 2 не найден")
 
 
 async def handle_show_examples(query, user, db, opened_categories=None):

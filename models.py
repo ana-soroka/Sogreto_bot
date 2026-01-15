@@ -42,6 +42,7 @@ class User(Base):
     # Статус
     is_active = Column(Boolean, default=True)
     is_paused = Column(Boolean, default=False)
+    awaiting_sprouts = Column(Boolean, default=False)  # Ожидание всходов после этапа 1
 
     # Настройки
     timezone = Column(String(50), default='Europe/Moscow')
