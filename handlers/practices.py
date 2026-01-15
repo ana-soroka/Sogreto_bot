@@ -3,11 +3,14 @@
 /start_practice и работа с практиками
 """
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from utils import error_handler, practices_manager
 from utils.db import get_or_create_user, update_user_progress
-from models import SessionLocal
+from models import SessionLocal, User
+from handlers.admin import is_admin
+from utils.scheduler import send_daily_practice_reminder
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +102,247 @@ async def start_practice_command(update: Update, context: ContextTypes.DEFAULT_T
         db.close()
 
 
+# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ МНОГОШАГОВЫХ ПРАКТИК ====================
+
+def _get_daily_practice_by_day(stage, day):
+    """Получить практику по номеру дня"""
+    daily_practices = stage.get('daily_practices', [])
+    for practice in daily_practices:
+        if practice.get('day') == day:
+            return practice
+    return None
+
+
+def _get_substep_by_id(daily_practice, substep_id):
+    """Получить подшаг по substep_id"""
+    substeps = daily_practice.get('substeps', [])
+    for substep in substeps:
+        if substep.get('substep_id') == substep_id:
+            return substep
+    return None
+
+
+def _get_next_substep_id(current_substep_id):
+    """Определить следующий подшаг"""
+    flow = {
+        "intro": "practice",
+        "practice": "checkin",
+        "response_A": "completion",
+        "response_B": "completion"
+    }
+    return flow.get(current_substep_id, "completion")
+
+
+async def _send_substep_message(query, substep):
+    """Отправить сообщение подшага с кнопками"""
+    title = substep.get('title', '')
+    message = substep.get('message', '')
+
+    if title:
+        full_message = f"**{title}**\n\n{message}"
+    else:
+        full_message = message
+
+    buttons = substep.get('buttons', [])
+    keyboard = create_practice_keyboard(buttons) if buttons else None
+
+    await query.edit_message_text(
+        full_message,
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
+
+
+# ==================== ОБРАБОТЧИКИ МНОГОШАГОВЫХ ПРАКТИК ====================
+
+async def handle_start_daily_substep(query, user, db):
+    """
+    Начать подшаги дня (переход от напоминания к первому подшагу)
+    """
+    current_day = user.daily_practice_day
+
+    logger.info(f"Пользователь {user.telegram_id} начинает подшаги дня {current_day}")
+
+    # Получить практику текущего дня
+    stage = practices_manager.get_stage(3)
+    if not stage:
+        logger.error("Этап 3 не найден в practices.json")
+        await query.edit_message_text("Ошибка: этап не найден")
+        return
+
+    daily_practice = _get_daily_practice_by_day(stage, current_day)
+
+    if not daily_practice:
+        logger.error(f"Практика дня {current_day} не найдена")
+        await query.edit_message_text(f"Ошибка: практика дня {current_day} не найдена")
+        return
+
+    # Установить текущий подшаг = "intro"
+    user.daily_practice_substep = "intro"
+    db.commit()
+
+    # Получить первый подшаг
+    substep = _get_substep_by_id(daily_practice, "intro")
+
+    if not substep:
+        logger.error(f"Подшаг 'intro' не найден для дня {current_day}")
+        await query.edit_message_text("Ошибка: подшаг не найден")
+        return
+
+    # Отправить сообщение подшага
+    await _send_substep_message(query, substep)
+
+    logger.info(f"Пользователь {user.telegram_id} начал подшаги дня {current_day}")
+
+
+async def handle_next_daily_substep(query, user, db, context):
+    """
+    Переход к следующему подшагу
+    """
+    current_day = user.daily_practice_day
+    current_substep = user.daily_practice_substep
+
+    logger.info(f"Пользователь {user.telegram_id} переходит от подшага '{current_substep}' к следующему")
+
+    # Получить практику текущего дня
+    stage = practices_manager.get_stage(3)
+    if not stage:
+        logger.error("Этап 3 не найден в practices.json")
+        await query.edit_message_text("Ошибка: этап не найден")
+        return
+
+    daily_practice = _get_daily_practice_by_day(stage, current_day)
+    if not daily_practice:
+        logger.error(f"Практика дня {current_day} не найдена")
+        await query.edit_message_text(f"Ошибка: практика дня {current_day} не найдена")
+        return
+
+    # Определить следующий подшаг
+    next_substep_id = _get_next_substep_id(current_substep)
+
+    # Обновить текущий подшаг
+    user.daily_practice_substep = next_substep_id
+    db.commit()
+
+    # Получить данные следующего подшага
+    substep = _get_substep_by_id(daily_practice, next_substep_id)
+
+    if not substep:
+        logger.error(f"Подшаг '{next_substep_id}' не найден для дня {current_day}")
+        await query.edit_message_text("Ошибка: подшаг не найден")
+        return
+
+    # Проверить авто-переходы
+    if substep.get('auto_proceed'):
+        await _send_substep_message(query, substep)
+        await asyncio.sleep(3)
+        await handle_next_daily_substep(query, user, db, context)
+        return
+
+    if substep.get('auto_complete'):
+        await _complete_daily_practice_flow(query, user, db, substep)
+        return
+
+    # Отправить сообщение подшага
+    await _send_substep_message(query, substep)
+
+    logger.info(f"Пользователь {user.telegram_id} перешёл к подшагу {next_substep_id}")
+
+
+async def handle_daily_choice_A(query, user, db, context):
+    """Выбор кнопки A в check-in"""
+    user.daily_practice_substep = "response_A"
+    db.commit()
+    await _send_response_substep(query, user, db, context, "response_A")
+
+
+async def handle_daily_choice_B(query, user, db, context):
+    """Выбор кнопки B в check-in"""
+    user.daily_practice_substep = "response_B"
+    db.commit()
+    await _send_response_substep(query, user, db, context, "response_B")
+
+
+async def _send_response_substep(query, user, db, context, substep_id):
+    """
+    Отправить ответный подшаг (response_A или response_B)
+    Автоматически перейти к завершению через 3 сек
+    """
+    current_day = user.daily_practice_day
+    stage = practices_manager.get_stage(3)
+    if not stage:
+        logger.error("Этап 3 не найден в practices.json")
+        await query.edit_message_text("Ошибка: этап не найден")
+        return
+
+    daily_practice = _get_daily_practice_by_day(stage, current_day)
+    if not daily_practice:
+        logger.error(f"Практика дня {current_day} не найдена")
+        await query.edit_message_text(f"Ошибка: практика дня {current_day} не найдена")
+        return
+
+    substep = _get_substep_by_id(daily_practice, substep_id)
+    if not substep:
+        logger.error(f"Подшаг '{substep_id}' не найден для дня {current_day}")
+        await query.edit_message_text("Ошибка: подшаг не найден")
+        return
+
+    # Отправить сообщение
+    message = substep.get('message', '')
+    await query.edit_message_text(message, parse_mode='Markdown')
+
+    # Автоматически перейти к финальному шагу
+    await asyncio.sleep(3)
+
+    user.daily_practice_substep = "completion"
+    db.commit()
+
+    final_substep = _get_substep_by_id(daily_practice, "completion")
+    if not final_substep:
+        logger.error(f"Подшаг 'completion' не найден для дня {current_day}")
+        await query.edit_message_text("Ошибка: подшаг завершения не найден")
+        return
+
+    await _complete_daily_practice_flow(query, user, db, final_substep)
+
+
+async def _complete_daily_practice_flow(query, user, db, final_substep):
+    """
+    Завершить флоу ежедневной практики
+    """
+    from datetime import date
+
+    current_day = user.daily_practice_day
+
+    # Отправить финальное сообщение
+    message = final_substep.get('message', '')
+    await query.edit_message_text(message, parse_mode='Markdown')
+
+    # Проверить, был ли это последний день
+    if current_day >= 4:
+        # Переход к Stage 4
+        update_user_progress(db, user.telegram_id, stage_id=4, step_id=12, day=user.current_day)
+        user.daily_practice_day = 0
+        user.daily_practice_substep = ""
+        user.last_practice_date = None
+        user.reminder_postponed = False
+        user.postponed_until = None
+        db.commit()
+
+        logger.info(f"Пользователь {user.telegram_id} завершил все ежедневные практики, переход к этапу 4")
+        return
+
+    # Обычное завершение дня
+    user.daily_practice_day = current_day + 1
+    user.daily_practice_substep = ""
+    user.last_practice_date = date.today().strftime('%Y-%m-%d')
+    user.reminder_postponed = False
+    user.postponed_until = None
+    db.commit()
+
+    logger.info(f"Пользователь {user.telegram_id} завершил практику дня {current_day}")
+
+
 @error_handler
 async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -169,6 +413,16 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_cancel_reset(query, user, db)
         elif action == "start_practice_after_reset":
             await handle_start_practice_after_reset(query, user, db)
+        elif action == "test_daily_reminder":
+            await handle_test_daily_reminder(query, user, db, context)
+        elif action == "start_daily_substep":
+            await handle_start_daily_substep(query, user, db)
+        elif action == "next_daily_substep":
+            await handle_next_daily_substep(query, user, db, context)
+        elif action == "daily_choice_A":
+            await handle_daily_choice_A(query, user, db, context)
+        elif action == "daily_choice_B":
+            await handle_daily_choice_B(query, user, db, context)
         else:
             await query.edit_message_text(
                 f"Действие '{action}' пока не реализовано.\n"
@@ -331,7 +585,19 @@ async def handle_complete_stage(query, user, db):
                 message += transition_step.get('message', '')
 
                 buttons = transition_step.get('buttons', [])
-                keyboard = create_practice_keyboard(buttons)
+                # Создать клавиатуру с возможностью добавления админской кнопки
+                keyboard_buttons = []
+                for button in buttons:
+                    text = button.get('text', '')
+                    action = button.get('action', '')
+                    if text and action:
+                        keyboard_buttons.append([InlineKeyboardButton(text, callback_data=action)])
+
+                # Добавить админскую кнопку если пользователь - админ
+                if is_admin(user.telegram_id):
+                    keyboard_buttons.append([InlineKeyboardButton("🧪 Тест-напоминание", callback_data="test_daily_reminder")])
+
+                keyboard = InlineKeyboardMarkup(keyboard_buttons)
 
                 await query.edit_message_text(
                     message,
@@ -895,3 +1161,38 @@ async def handle_view_daily_practice(query, user, db):
         parse_mode='Markdown'
     )
     logger.info(f"Пользователь {user.telegram_id} вернулся к практике дня {current_day}")
+
+
+async def handle_test_daily_reminder(query, user, db, context):
+    """
+    Админская функция: отправить тестовое напоминание о ежедневной практике
+    """
+    # Проверка прав администратора
+    if not is_admin(user.telegram_id):
+        await query.answer("⛔ Эта функция доступна только администраторам", show_alert=True)
+        logger.warning(f"Пользователь {user.telegram_id} попытался использовать test_daily_reminder без прав")
+        return
+
+    try:
+        # Получить данные пользователя из БД
+        db_user = db.query(User).filter(User.telegram_id == user.telegram_id).first()
+
+        if not db_user:
+            await query.answer("❌ Ошибка: пользователь не найден в БД", show_alert=True)
+            return
+
+        # Установить daily_practice_day если он 0 (начать первый день)
+        if db_user.daily_practice_day == 0:
+            db_user.daily_practice_day = 1
+            db.commit()
+            logger.info(f"Установлен daily_practice_day=1 для пользователя {user.telegram_id} (тест-напоминание)")
+
+        # Отправить тестовое напоминание
+        await send_daily_practice_reminder(context.bot, db_user, db)
+
+        await query.answer("✅ Тестовое напоминание отправлено!", show_alert=True)
+        logger.info(f"Администратор {user.telegram_id} отправил себе тестовое напоминание о ежедневной практике")
+
+    except Exception as e:
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+        logger.error(f"Ошибка при отправке тестового напоминания для админа {user.telegram_id}: {e}")

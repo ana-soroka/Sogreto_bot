@@ -152,7 +152,7 @@ def main():
 
     # Обработчик нажатий на кнопки (callback_query)
     # Используем паттерны для разных типов кнопок
-    application.add_handler(CallbackQueryHandler(handle_practice_callback, pattern="^(next_step|prev_step|complete_stage|show_examples_menu|toggle_category_.*|continue_from_examples|show_recipes|show_manifesto|start_daily_practices|sprouts_appeared|continue_practice|confirm_reset|cancel_reset)$"))
+    application.add_handler(CallbackQueryHandler(handle_practice_callback, pattern="^(next_step|prev_step|complete_stage|show_examples_menu|toggle_category_.*|continue_from_examples|show_recipes|show_manifesto|start_daily_practices|sprouts_appeared|continue_practice|confirm_reset|cancel_reset|test_daily_reminder|start_daily_substep|next_daily_substep|daily_choice_A|daily_choice_B|postpone_reminder|start_waiting_for_daily)$"))
     application.add_handler(CallbackQueryHandler(handle_time_callback, pattern="^time_"))
     application.add_handler(CallbackQueryHandler(handle_timezone_callback, pattern="^tz_"))
 

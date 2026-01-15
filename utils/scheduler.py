@@ -271,7 +271,8 @@ async def send_practice_reminder(bot: Bot, user_id: int):
 
 async def send_daily_practice_reminder(bot: Bot, user, db):
     """
-    Отправить напоминание о ежедневной практике (Stage 3)
+    Отправить короткое напоминание о ежедневной практике (Stage 3)
+    ИЗМЕНЕНО: теперь отправляет только reminder, а не всю практику
 
     Args:
         bot: Telegram Bot instance
@@ -298,12 +299,17 @@ async def send_daily_practice_reminder(bot: Bot, user, db):
             logger.error(f"Практика дня {current_day} не найдена в этапе 3")
             return
 
-        # Сформировать сообщение
-        message = f"**{practice.get('title', 'Практика')}**\n\n"
-        message += practice.get('message', '')
+        # ИЗМЕНЕНИЕ: Получить reminder вместо всей практики
+        reminder = practice.get('reminder', {})
+        if not reminder:
+            logger.error(f"Reminder не найден для дня {current_day}")
+            return
 
-        # Создать клавиатуру
-        buttons = practice.get('buttons', [])
+        # Сформировать сообщение из reminder
+        message = reminder.get('message', '')
+
+        # Создать клавиатуру из reminder.buttons
+        buttons = reminder.get('buttons', [])
         keyboard_buttons = []
         for button in buttons:
             text = button.get('text', '')
@@ -313,7 +319,7 @@ async def send_daily_practice_reminder(bot: Bot, user, db):
 
         keyboard = InlineKeyboardMarkup(keyboard_buttons) if keyboard_buttons else None
 
-        # Отправить сообщение
+        # Отправить короткое напоминание
         await bot.send_message(
             chat_id=user.telegram_id,
             text=message,
@@ -321,10 +327,10 @@ async def send_daily_practice_reminder(bot: Bot, user, db):
             reply_markup=keyboard
         )
 
-        logger.info(f"Отправлено напоминание о ежедневной практике дня {current_day} пользователю {user.telegram_id}")
+        logger.info(f"Отправлено напоминание (reminder) дня {current_day} пользователю {user.telegram_id}")
 
     except Exception as e:
-        logger.error(f"Ошибка при отправке ежедневной практики пользователю {user.telegram_id}: {e}")
+        logger.error(f"Ошибка при отправке напоминания пользователю {user.telegram_id}: {e}")
 
 
 async def check_and_send_reminders(bot: Bot):

@@ -46,6 +46,7 @@ class User(Base):
 
     # Ежедневные практики (Stage 3)
     daily_practice_day = Column(Integer, default=0)  # 0 = ожидание, 1-4 = дни практик
+    daily_practice_substep = Column(String(20), default="")  # Текущий подшаг: "intro", "practice", "checkin", "response_A", "response_B", "completion"
     last_practice_date = Column(String(10), nullable=True)  # YYYY-MM-DD формат
     reminder_postponed = Column(Boolean, default=False)  # Напоминание отложено
     postponed_until = Column(DateTime, nullable=True)  # Время отложенного напоминания
