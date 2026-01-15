@@ -159,6 +159,8 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_confirm_reset(query, user, db)
         elif action == "cancel_reset":
             await handle_cancel_reset(query, user, db)
+        elif action == "start_practice_after_reset":
+            await handle_start_practice_after_reset(query, user, db)
         else:
             await query.edit_message_text(
                 f"Действие '{action}' пока не реализовано.\n"
@@ -589,18 +591,101 @@ async def handle_continue_practice(query, user, db):
 
 async def handle_confirm_reset(query, user, db):
     """Подтвердить сброс прогресса и начать заново"""
-    from utils.db import reset_user_progress
+    from utils.db import reset_user_progress, update_user_progress
+    from datetime import datetime
 
     # Сбросить прогресс пользователя
     reset_user_progress(db, user.telegram_id)
 
+    # Получить первый шаг первого этапа
+    first_step = practices_manager.get_step(stage_id=1, step_id=1)
+
+    if not first_step:
+        await query.edit_message_text(
+            "😞 Извините, произошла ошибка при загрузке практик.\n"
+            "Пожалуйста, попробуйте позже."
+        )
+        logger.error(f"Не удалось загрузить первый шаг практики для пользователя {user.telegram_id}")
+        return
+
+    # Обновить прогресс пользователя
+    update_user_progress(db, user.telegram_id, stage_id=1, step_id=1, day=1)
+
+    # Установить started_at
+    user.started_at = datetime.utcnow()
+    db.commit()
+
+    # Сформировать сообщение первого шага
+    message = f"�� **Прогресс сброшен!**\n\n"
+    message += f"Начнём сначала! 🌱\n\n"
+    message += f"**{first_step.get('title', 'Практика')}**\n\n"
+    message += first_step.get('message', '')
+
+    # Создать клавиатуру с кнопками первого шага
+    buttons = first_step.get('buttons', [])
+    keyboard = create_practice_keyboard(buttons)
+
+    # Отправить первый шаг
     await query.edit_message_text(
-        "🔄 **Прогресс сброшен!**\n\n"
-        "Вы можете начать практики заново командой /start_practice\n\n"
-        "Начнём сначала! 🌱"
+        message,
+        reply_markup=keyboard,
+        parse_mode='Markdown'
     )
 
-    logger.info(f"Пользователь {user.telegram_id} подтвердил сброс прогресса")
+    logger.info(f"Пользователь {user.telegram_id} подтвердил сброс прогресса и начал практику")
+
+
+async def handle_start_practice_after_reset(query, user, db):
+    """Начать практику после сброса прогресса"""
+    from utils.db import update_user_progress
+    from datetime import datetime
+
+    logger.info(f"[DEBUG] handle_start_practice_after_reset вызван для пользователя {user.telegram_id}")
+
+    # Получить первый шаг первого этапа (stage_id=1, step_id=1)
+    first_step = practices_manager.get_step(stage_id=1, step_id=1)
+    logger.info(f"[DEBUG] first_step получен: {first_step is not None}")
+
+    if not first_step:
+        await query.edit_message_text(
+            "😞 Извините, произошла ошибка при загрузке практик.\n"
+            "Пожалуйста, попробуйте позже или свяжитесь с поддержкой: /contact"
+        )
+        logger.error(f"Не удалось загрузить первый шаг практики для пользователя {user.telegram_id}")
+        return
+
+    # Обновить прогресс пользователя
+    update_user_progress(db, user.telegram_id, stage_id=1, step_id=1, day=1)
+    logger.info(f"[DEBUG] Прогресс обновлен")
+
+    # Установить started_at
+    user.started_at = datetime.utcnow()
+    db.commit()
+    logger.info(f"[DEBUG] started_at установлен")
+
+    # Сформировать сообщение
+    message = f"**{first_step.get('title', 'Начало практики')}**\n\n"
+    message += first_step.get('message', '')
+    logger.info(f"[DEBUG] Сообщение сформировано, длина: {len(message)}")
+
+    # Создать клавиатуру с кнопками
+    buttons = first_step.get('buttons', [])
+    keyboard = create_practice_keyboard(buttons)
+    logger.info(f"[DEBUG] Клавиатура создана, кнопок: {len(buttons)}")
+
+    # Отправить первый шаг
+    try:
+        await query.edit_message_text(
+            message,
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+        logger.info(f"[DEBUG] Сообщение отправлено успешно")
+    except Exception as e:
+        logger.error(f"[DEBUG] Ошибка при отправке сообщения: {e}")
+        raise
+
+    logger.info(f"Пользователь {user.telegram_id} начал практику после сброса")
 
 
 async def handle_cancel_reset(query, user, db):
