@@ -126,7 +126,8 @@ def _get_next_substep_id(current_substep_id):
     """Определить следующий подшаг"""
     flow = {
         "intro": "practice",
-        "practice": "checkin",
+        "practice": "checkin",  # По умолчанию practice → checkin
+        "practice2": "checkin",
         "response_A": "completion",
         "response_B": "completion"
     }
@@ -220,17 +221,24 @@ async def handle_next_daily_substep(query, user, db, context):
     # Определить следующий подшаг
     next_substep_id = _get_next_substep_id(current_substep)
 
-    # Обновить текущий подшаг
-    user.daily_practice_substep = next_substep_id
-    db.commit()
-
-    # Получить данные следующего подшага
+    # Проверить, существует ли этот substep в практике
     substep = _get_substep_by_id(daily_practice, next_substep_id)
+
+    # Если после practice идёт checkin, но есть practice2 - используем его
+    if current_substep == "practice":
+        practice2_substep = _get_substep_by_id(daily_practice, "practice2")
+        if practice2_substep:
+            next_substep_id = "practice2"
+            substep = practice2_substep
 
     if not substep:
         logger.error(f"Подшаг '{next_substep_id}' не найден для дня {current_day}")
         await query.edit_message_text("Ошибка: подшаг не найден")
         return
+
+    # Обновить текущий подшаг
+    user.daily_practice_substep = next_substep_id
+    db.commit()
 
     # Проверить авто-переходы
     if substep.get('auto_proceed'):
@@ -402,6 +410,8 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_start_practice_after_reset(query, user, db)
         elif action == "test_daily_reminder":
             await handle_test_daily_reminder(query, user, db, context)
+        elif action == "test_day5_reminder":
+            await handle_test_day5_reminder(query, user, db, context)
         elif action == "start_daily_substep":
             await handle_start_daily_substep(query, user, db)
         elif action == "next_daily_substep":
@@ -1183,3 +1193,37 @@ async def handle_test_daily_reminder(query, user, db, context):
     except Exception as e:
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
         logger.error(f"Ошибка при отправке тестового напоминания для админа {user.telegram_id}: {e}")
+
+
+async def handle_test_day5_reminder(query, user, db, context):
+    """
+    Админская функция: отправить тестовое напоминание о дне 5 (практика Якорь)
+    """
+    # Проверка прав администратора
+    if not is_admin(user.telegram_id):
+        await query.answer("⛔ Эта функция доступна только администраторам", show_alert=True)
+        logger.warning(f"Пользователь {user.telegram_id} попытался использовать test_day5_reminder без прав")
+        return
+
+    try:
+        # Получить данные пользователя из БД
+        db_user = db.query(User).filter(User.telegram_id == user.telegram_id).first()
+
+        if not db_user:
+            await query.answer("❌ Ошибка: пользователь не найден в БД", show_alert=True)
+            return
+
+        # Установить daily_practice_day = 5 для теста дня 5
+        db_user.daily_practice_day = 5
+        db.commit()
+        logger.info(f"Установлен daily_practice_day=5 для пользователя {user.telegram_id} (тест-напоминание день 5)")
+
+        # Отправить тестовое напоминание для дня 5
+        await send_daily_practice_reminder(context.bot, db_user, db)
+
+        await query.answer("✅ Тестовое напоминание (день 5) отправлено!", show_alert=True)
+        logger.info(f"Администратор {user.telegram_id} отправил себе тестовое напоминание о дне 5")
+
+    except Exception as e:
+        await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+        logger.error(f"Ошибка при отправке тестового напоминания дня 5 для админа {user.telegram_id}: {e}")
