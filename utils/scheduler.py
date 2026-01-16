@@ -269,6 +269,74 @@ async def send_practice_reminder(bot: Bot, user_id: int):
         db.close()
 
 
+async def send_stage4_reminder(bot: Bot, user, db):
+    """
+    Отправить напоминание о практике Stage 4 (Якорь)
+
+    Args:
+        bot: Telegram Bot instance
+        user: объект User из БД
+        db: сессия БД
+    """
+    try:
+        # Получить Stage 4
+        stage = practices_manager.get_stage(4)
+        if not stage:
+            logger.error("Этап 4 не найден в practices.json")
+            return
+
+        # Получить первый шаг Stage 4 (шаг 12)
+        steps = stage.get('steps', [])
+        if not steps:
+            logger.error("Шаги не найдены в Stage 4")
+            return
+
+        first_step = steps[0]
+
+        # Обновить состояние пользователя - перевести на Stage 4, Step 12
+        from utils.db import update_user_progress
+        update_user_progress(db, user.telegram_id, stage_id=4, step_id=12, day=user.current_day)
+
+        # Сбросить daily_practice_day и substep, так как переходим к новому этапу
+        user.daily_practice_day = 0
+        user.daily_practice_substep = ""
+        db.commit()
+
+        logger.info(f"Пользователь {user.telegram_id} переведен на Stage 4, Step 12")
+
+        # Сформировать сообщение-напоминание
+        message = f"🌱 **Пора собирать первый урожай!**\n\n"
+        message += f"Твоя микрозелень готова! Пришло время практики «Якорь» — мы свяжем твои желания с первыми результатами.\n\n"
+        message += f"**{first_step.get('title', '')}**\n\n"
+        message += first_step.get('message', '')
+
+        # Создать клавиатуру с кнопкой из практики
+        buttons_data = first_step.get('buttons', [])
+        if buttons_data:
+            keyboard_buttons = []
+            for btn in buttons_data:
+                keyboard_buttons.append([InlineKeyboardButton(btn['text'], callback_data=btn['action'])])
+            keyboard = InlineKeyboardMarkup(keyboard_buttons)
+        else:
+            # Если кнопок нет в practice, используем стандартную
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Начать практику", callback_data="next_step")]
+            ])
+
+        # Отправить напоминание
+        await bot.send_message(
+            chat_id=user.telegram_id,
+            text=message,
+            parse_mode='Markdown',
+            reply_markup=keyboard
+        )
+
+        logger.info(f"Отправлено напоминание о Stage 4 пользователю {user.telegram_id}")
+
+    except Exception as e:
+        logger.error(f"Ошибка при отправке напоминания Stage 4 пользователю {user.telegram_id}: {e}")
+
+
 async def send_daily_practice_reminder(bot: Bot, user, db):
     """
     Отправить короткое напоминание о ежедневной практике (Stage 3)
@@ -407,6 +475,25 @@ async def check_and_send_reminders(bot: Bot):
                             user.last_reminder_sent = now_utc
                             db.commit()
                             continue
+
+                        # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ НАПОМИНАНИЯ О STAGE 4 (практика "Якорь")
+                        if user.stage4_reminder_date:
+                            today_str = now_user_tz.date().strftime('%Y-%m-%d')
+
+                            # Если сегодня день напоминания о Stage 4
+                            if user.stage4_reminder_date == today_str:
+                                # Отправить напоминание о Stage 4
+                                await send_stage4_reminder(bot, user, db)
+
+                                # Сбросить флаг напоминания
+                                user.stage4_reminder_date = None
+
+                                # Обновить время последнего напоминания
+                                user.last_reminder_sent = now_utc
+                                db.commit()
+
+                                logger.info(f"Отправлено напоминание о Stage 4 пользователю {user.telegram_id}")
+                                continue
 
                         # Проверить, не отправляли ли уже сегодня (для обычных напоминаний)
                         if user.last_reminder_sent:

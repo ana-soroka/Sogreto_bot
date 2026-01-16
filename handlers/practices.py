@@ -816,9 +816,13 @@ async def handle_show_recipes(query, user, db, context=None, opened_recipes=None
 
         keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
 
-    # Добавляем кнопку завершения (если все рецепты развернуты хотя бы один раз)
-    # Или всегда показываем кнопку завершения
-    keyboard.append([InlineKeyboardButton("✅ Завершить практику", callback_data="next_daily_substep")])
+    # Добавляем кнопку для продолжения
+    # Для Stage 4 - переход к следующему шагу (Step 16)
+    # Для Stage 5 (daily practices) - использовать next_daily_substep
+    if user.current_stage == 4:
+        keyboard.append([InlineKeyboardButton("✅ Продолжить", callback_data="next_step")])
+    else:
+        keyboard.append([InlineKeyboardButton("✅ Завершить практику", callback_data="next_daily_substep")])
 
     await query.edit_message_text(
         message,
