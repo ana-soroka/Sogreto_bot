@@ -35,6 +35,8 @@ from handlers import (
     contact_command,
     start_practice_command,
     handle_practice_callback,
+    handle_stage5_start_substep,
+    handle_stage5_next_substep,
     set_time_command,
     timezone_command,
     handle_time_callback,
@@ -157,6 +159,9 @@ def main():
     # Используем паттерны для разных типов кнопок
     application.add_handler(CallbackQueryHandler(handle_practice_callback, pattern="^(next_step|prev_step|complete_stage|show_examples_menu|toggle_category_.*|continue_from_examples|show_recipes|expand_recipe_.*|collapse_recipe_.*|show_manifesto|start_daily_practices|sprouts_appeared|continue_practice|confirm_reset|cancel_reset|test_daily_reminder|start_daily_substep|next_daily_substep|daily_choice_A|daily_choice_B|complete_day4_practice|test_stage4_reminder|postpone_reminder|start_waiting_for_daily)$"))
     application.add_handler(CallbackQueryHandler(handle_admin_test_callback, pattern="^(admin_test_day[1-4]|admin_test_stage4|admin_refresh_status)$"))
+    # Stage 5 обработчики
+    application.add_handler(CallbackQueryHandler(handle_stage5_start_substep, pattern="^stage5_start_substep$"))
+    application.add_handler(CallbackQueryHandler(handle_stage5_next_substep, pattern="^stage5_next_substep$"))
     application.add_handler(CallbackQueryHandler(handle_time_callback, pattern="^time_"))
     application.add_handler(CallbackQueryHandler(handle_timezone_callback, pattern="^tz_"))
 

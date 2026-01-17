@@ -401,6 +401,62 @@ async def send_daily_practice_reminder(bot: Bot, user, db):
         logger.error(f"Ошибка при отправке напоминания пользователю {user.telegram_id}: {e}")
 
 
+async def send_stage5_daily_reminder(bot: Bot, user, db):
+    """
+    Отправить напоминание о ежедневной практике Stage 5 (До беби-лифа)
+
+    Args:
+        bot: Telegram Bot instance
+        user: объект User из БД
+        db: сессия БД
+    """
+    try:
+        current_day = user.daily_practice_day
+
+        # Получить Stage 5
+        stage = practices_manager.get_stage(5)
+        if not stage:
+            logger.error("Этап 5 не найден в practices.json")
+            return
+
+        # Получить практику текущего дня
+        daily_practices = stage.get('daily_practices', [])
+        practice = None
+        for p in daily_practices:
+            if p.get('day') == current_day:
+                practice = p
+                break
+
+        if not practice:
+            logger.error(f"Практика дня {current_day} не найдена в Stage 5")
+            return
+
+        # Сформировать сообщение
+        theme = practice.get('theme', '')
+        message = f"🌱 **День {current_day} из 7: {theme}**\n\n"
+        message += f"Пришло время ежедневной практики с долгосрочными целями.\n\n"
+        message += f"Сегодня мы поработаем с темой «{theme}»."
+
+        # Кнопка для начала практики
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Начать практику", callback_data="stage5_start_substep")],
+            [InlineKeyboardButton("Напомнить позже", callback_data="postpone_reminder")]
+        ])
+
+        # Отправить напоминание
+        await bot.send_message(
+            chat_id=user.telegram_id,
+            text=message,
+            parse_mode='Markdown',
+            reply_markup=keyboard
+        )
+
+        logger.info(f"Отправлено напоминание Stage 5 (день {current_day}) пользователю {user.telegram_id}")
+
+    except Exception as e:
+        logger.error(f"Ошибка при отправке напоминания Stage 5 пользователю {user.telegram_id}: {e}")
+
+
 async def check_and_send_reminders(bot: Bot):
     """
     Проверить всех пользователей и отправить напоминания тем, кому нужно
@@ -494,6 +550,43 @@ async def check_and_send_reminders(bot: Bot):
 
                                 logger.info(f"Отправлено напоминание о Stage 4 пользователю {user.telegram_id}")
                                 continue
+
+                        # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЕЖЕДНЕВНЫХ ПРАКТИК STAGE 5 (До беби-лифа)
+                        if user.current_stage == 5 and user.daily_practice_day == 0:
+                            # Пользователь в режиме ожидания, нужно начать первую практику
+                            user.daily_practice_day = 1
+                            db.commit()
+
+                            # Отправить первую практику Stage 5
+                            await send_stage5_daily_reminder(bot, user, db)
+
+                            # Обновить время последнего напоминания
+                            user.last_reminder_sent = now_utc
+                            db.commit()
+                            continue
+
+                        if user.current_stage == 5 and user.daily_practice_day >= 1:
+                            # Проверить, не выполнена ли уже практика сегодня
+                            today_str = now_user_tz.date().strftime('%Y-%m-%d')
+
+                            if user.last_practice_date == today_str:
+                                logger.debug(f"Пользователь {user.telegram_id} уже выполнил практику Stage 5 сегодня")
+                                continue
+
+                            # Проверить отложенное напоминание
+                            if user.reminder_postponed and user.postponed_until:
+                                # Если время ещё не пришло, пропускаем
+                                if now_utc < user.postponed_until:
+                                    logger.debug(f"Напоминание Stage 5 для пользователя {user.telegram_id} отложено до {user.postponed_until}")
+                                    continue
+
+                            # Отправить ежедневную практику Stage 5
+                            await send_stage5_daily_reminder(bot, user, db)
+
+                            # Обновить время последнего напоминания
+                            user.last_reminder_sent = now_utc
+                            db.commit()
+                            continue
 
                         # Проверить, не отправляли ли уже сегодня (для обычных напоминаний)
                         if user.last_reminder_sent:
