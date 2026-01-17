@@ -196,7 +196,6 @@
         const DURATION = 60; // секунды
         const CIRCUMFERENCE = 2 * Math.PI * 120; // радиус 120
         let timeLeft = DURATION;
-        let intervalId;
 
         // Массив мотивационных сообщений
         const messages = [
@@ -237,8 +236,6 @@
 
         // Функция завершения таймера
         function completeTimer() {
-            clearInterval(intervalId);
-
             // Скрыть таймер и индикатор дыхания
             timerCircle.style.opacity = '0';
             breathIndicator.style.opacity = '0';
@@ -257,15 +254,24 @@
             }, 500);
         }
 
-        // Основной таймер
+        // Основной таймер с использованием более точного времени
+        let startTime;
+        let animationId;
+
         function startTimer() {
-            intervalId = setInterval(() => {
-                timeLeft--;
+            startTime = Date.now();
+
+            function tick() {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                timeLeft = DURATION - elapsed;
+
+                if (timeLeft < 0) timeLeft = 0;
+
                 timerText.textContent = formatTime(timeLeft);
                 updateProgress();
 
                 // Смена сообщений каждые 10 секунд
-                if (timeLeft % 10 === 0 && timeLeft > 0) {
+                if (timeLeft % 10 === 0 && timeLeft > 0 && elapsed > 0 && elapsed % 10 === 0) {
                     cycleMessages();
                 }
 
@@ -280,8 +286,13 @@
                 // Завершение
                 if (timeLeft <= 0) {
                     completeTimer();
+                } else {
+                    // Продолжаем тик каждые 100ms для плавности
+                    setTimeout(tick, 100);
                 }
-            }, 1000);
+            }
+
+            tick();
         }
 
         // Инициализация прогресса
@@ -293,10 +304,7 @@
             startTimer();
         }, 1000);
 
-        // Обработка закрытия Web App
-        window.addEventListener('beforeunload', () => {
-            clearInterval(intervalId);
-        });
+        // Обработка закрытия Web App (таймер остановится автоматически)
     </script>
 </body>
 </html>
