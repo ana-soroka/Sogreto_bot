@@ -56,7 +56,7 @@ def _get_stage5_step_by_type(practice, step_type: str):
 
 async def handle_stage5_start_substep(query, user, db):
     """
-    Начать подшаги Stage 5 (переход от напоминания к первому подшагу - question)
+    Начать подшаги Stage 5 (переход от напоминания к первому подшагу - intro)
     """
     current_day = user.daily_practice_day
 
@@ -70,22 +70,21 @@ async def handle_stage5_start_substep(query, user, db):
         await query.edit_message_text("Ошибка: практика дня не найдена")
         return
 
-    # Установить текущий подшаг = "question"
-    user.daily_practice_substep = "question"
+    # Установить текущий подшаг = "intro"
+    user.daily_practice_substep = "intro"
     db.commit()
 
-    # Получить первый подшаг (question)
-    step = _get_stage5_step_by_type(practice, "question")
+    # Получить первый подшаг (intro)
+    step = _get_stage5_step_by_type(practice, "intro")
 
     if not step:
-        logger.error(f"Подшаг 'question' не найден для дня {current_day}")
+        logger.error(f"Подшаг 'intro' не найден для дня {current_day}")
         await query.edit_message_text("Ошибка: подшаг не найден")
         return
 
     # Сформировать сообщение
     theme = practice.get('theme', '')
-    message = f"**День {current_day}: {theme}**\n\n"
-    message += f"**Вопрос для размышления:**\n\n"
+    message = f"🌱 **День {current_day} из 7: {theme}**\n\n"
     message += step.get('text', '')
 
     # Кнопка "Продолжить"
@@ -95,12 +94,12 @@ async def handle_stage5_start_substep(query, user, db):
 
     await query.edit_message_text(message, reply_markup=keyboard, parse_mode='Markdown')
 
-    logger.info(f"Пользователь {user.telegram_id} начал подшаг 'question' дня {current_day} (Stage 5)")
+    logger.info(f"Пользователь {user.telegram_id} начал подшаг 'intro' дня {current_day} (Stage 5)")
 
 
 async def handle_stage5_next_substep(query, user, db):
     """
-    Переход к следующему подшагу Stage 5 (question → feeling → affirmation → completion)
+    Переход к следующему подшагу Stage 5 (intro → timer → affirmation → watering → completion)
     """
     current_day = user.daily_practice_day
     current_substep = user.daily_practice_substep
@@ -117,11 +116,13 @@ async def handle_stage5_next_substep(query, user, db):
 
     # Определить следующий подшаг
     next_substep = None
-    if current_substep == "question":
-        next_substep = "feeling"
-    elif current_substep == "feeling":
+    if current_substep == "intro":
+        next_substep = "timer"
+    elif current_substep == "timer":
         next_substep = "affirmation"
     elif current_substep == "affirmation":
+        next_substep = "watering"
+    elif current_substep == "watering":
         # Это был последний подшаг - завершить день
         await _complete_stage5_day(query, user, db, practice)
         return
@@ -145,20 +146,16 @@ async def handle_stage5_next_substep(query, user, db):
 
     # Сформировать сообщение
     theme = practice.get('theme', '')
-    message = f"**День {current_day}: {theme}**\n\n"
-
-    if next_substep == "feeling":
-        message += f"**Почувствуй это:**\n\n"
-    elif next_substep == "affirmation":
-        message += f"**Произнеси аффирмацию:**\n\n"
-
+    message = f"🌱 **День {current_day} из 7: {theme}**\n\n"
     message += step.get('text', '')
 
     # Кнопка
-    if next_substep == "affirmation":
-        button_text = "Завершить день"
-    else:
-        button_text = "Продолжить"
+    if next_substep == "timer":
+        button_text = "Минута прошла"
+    elif next_substep == "affirmation":
+        button_text = "Принято. До завтра" if current_day < 7 else "Перейти к празднику зрелости"
+    elif next_substep == "watering":
+        button_text = "Ага"
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(button_text, callback_data="stage5_next_substep")]
