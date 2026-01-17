@@ -181,6 +181,15 @@
         tg.ready();
         tg.expand();
 
+        // Настроить MainButton для отправки данных
+        tg.MainButton.setText('Продолжить');
+        tg.MainButton.hide(); // Скрыть до завершения таймера
+
+        // Обработчик нажатия на MainButton
+        tg.MainButton.onClick(() => {
+            tg.sendData(JSON.stringify({ action: 'timer_completed' }));
+        });
+
         // Настройка цветов темы
         document.body.style.background = tg.themeParams.bg_color || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
 
@@ -255,16 +264,9 @@
                     setTimeout(() => tg.HapticFeedback.impactOccurred('medium'), 200);
                 }
 
-                // Отправить данные боту через 1 секунду
-                // sendData() автоматически закрывает Web App
+                // Показать кнопку "Продолжить" через 1 секунду
                 setTimeout(() => {
-                    try {
-                        tg.sendData(JSON.stringify({ action: 'timer_completed' }));
-                    } catch (e) {
-                        console.error('Ошибка sendData:', e);
-                        // Если sendData не сработал, просто закрыть
-                        tg.close();
-                    }
+                    tg.MainButton.show();
                 }, 1000);
             }, 500);
         }
