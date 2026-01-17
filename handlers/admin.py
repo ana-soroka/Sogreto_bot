@@ -110,6 +110,7 @@ async def admin_test_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             [InlineKeyboardButton("🧪 Тест: День 3 (Stage 3)", callback_data="admin_test_day3")],
             [InlineKeyboardButton("🧪 Тест: День 4 (Stage 3)", callback_data="admin_test_day4")],
             [InlineKeyboardButton("🧪 Тест: Якорь (Stage 4)", callback_data="admin_test_stage4")],
+            [InlineKeyboardButton("🧪 Тест: День 1-7 (Stage 5)", callback_data="admin_test_stage5_menu")],
             [InlineKeyboardButton("📊 Обновить статус", callback_data="admin_refresh_status")],
         ]
 
