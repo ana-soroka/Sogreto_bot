@@ -154,9 +154,10 @@ async def handle_stage5_next_substep(query, user, db):
 
     # Кнопка
     if next_substep == "timer":
-        # Для таймера используем Web App
+        # Для таймера показываем две кнопки: Web App и ручное продолжение
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⏱ Запустить таймер", web_app=WebAppInfo(url=TIMER_WEBAPP_URL))]
+            [InlineKeyboardButton("⏱ Запустить таймер", web_app=WebAppInfo(url=TIMER_WEBAPP_URL))],
+            [InlineKeyboardButton("Продолжить", callback_data="stage5_next_substep")]
         ])
     else:
         # Для остальных подшагов обычные кнопки

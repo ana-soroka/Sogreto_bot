@@ -181,15 +181,6 @@
         tg.ready();
         tg.expand();
 
-        // Настроить MainButton для отправки данных
-        tg.MainButton.text = 'Продолжить';
-        tg.MainButton.hide();
-
-        // Обработчик нажатия на MainButton через событие
-        tg.onEvent('mainButtonClicked', function() {
-            tg.sendData(JSON.stringify({ action: 'timer_completed' }));
-        });
-
         // Настройка цветов темы
         document.body.style.background = tg.themeParams.bg_color || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
 
@@ -263,11 +254,6 @@
                     setTimeout(() => tg.HapticFeedback.impactOccurred('medium'), 100);
                     setTimeout(() => tg.HapticFeedback.impactOccurred('medium'), 200);
                 }
-
-                // Показать кнопку "Продолжить" через 1 секунду
-                setTimeout(() => {
-                    tg.MainButton.show();
-                }, 1000);
             }, 500);
         }
 
