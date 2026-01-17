@@ -181,6 +181,9 @@
         tg.ready();
         tg.expand();
 
+        // Держим Web App активным
+        tg.enableClosingConfirmation();
+
         // Настройка цветов темы
         document.body.style.background = tg.themeParams.bg_color || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
 
@@ -236,6 +239,9 @@
 
         // Функция завершения таймера
         function completeTimer() {
+            // Разрешить закрытие Web App
+            tg.disableClosingConfirmation();
+
             // Скрыть таймер и индикатор дыхания
             timerCircle.style.opacity = '0';
             breathIndicator.style.opacity = '0';
@@ -254,12 +260,19 @@
             }, 500);
         }
 
-        // Основной таймер с использованием более точного времени
+        // Основной таймер
         let startTime;
-        let animationId;
+        let lastMessageChange = 0;
 
         function startTimer() {
             startTime = Date.now();
+
+            // Heartbeat для Telegram - держим соединение живым
+            const heartbeat = setInterval(() => {
+                if (tg.isVersionAtLeast && tg.isVersionAtLeast('6.0')) {
+                    // Просто проверяем версию, чтобы держать API активным
+                }
+            }, 2000);
 
             function tick() {
                 const elapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -271,7 +284,8 @@
                 updateProgress();
 
                 // Смена сообщений каждые 10 секунд
-                if (timeLeft % 10 === 0 && timeLeft > 0 && elapsed > 0 && elapsed % 10 === 0) {
+                if (elapsed > 0 && Math.floor(elapsed / 10) > lastMessageChange) {
+                    lastMessageChange = Math.floor(elapsed / 10);
                     cycleMessages();
                 }
 
@@ -285,9 +299,10 @@
 
                 // Завершение
                 if (timeLeft <= 0) {
+                    clearInterval(heartbeat);
                     completeTimer();
                 } else {
-                    // Продолжаем тик каждые 100ms для плавности
+                    // Продолжаем тик каждые 100ms
                     setTimeout(tick, 100);
                 }
             }
