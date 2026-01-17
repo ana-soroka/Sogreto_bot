@@ -182,13 +182,15 @@
         tg.expand();
 
         // Настроить MainButton для отправки данных
-        tg.MainButton.setText('Продолжить');
-        tg.MainButton.hide(); // Скрыть до завершения таймера
+        if (tg.MainButton) {
+            tg.MainButton.text = 'Продолжить';
+            tg.MainButton.hide();
 
-        // Обработчик нажатия на MainButton
-        tg.MainButton.onClick(() => {
-            tg.sendData(JSON.stringify({ action: 'timer_completed' }));
-        });
+            // Обработчик нажатия на MainButton
+            tg.MainButton.onClick(function() {
+                tg.sendData(JSON.stringify({ action: 'timer_completed' }));
+            });
+        }
 
         // Настройка цветов темы
         document.body.style.background = tg.themeParams.bg_color || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
@@ -266,7 +268,9 @@
 
                 // Показать кнопку "Продолжить" через 1 секунду
                 setTimeout(() => {
-                    tg.MainButton.show();
+                    if (tg.MainButton) {
+                        tg.MainButton.show();
+                    }
                 }, 1000);
             }, 500);
         }
