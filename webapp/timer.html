@@ -184,8 +184,8 @@
         // Держим Web App активным
         tg.enableClosingConfirmation();
 
-        // Настройка цветов темы
-        document.body.style.background = tg.themeParams.bg_color || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        // Настройка цветов темы - всегда используем градиент
+        document.body.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
 
         // Элементы
         const timerText = document.getElementById('timer');
@@ -257,6 +257,11 @@
                     setTimeout(() => tg.HapticFeedback.impactOccurred('medium'), 100);
                     setTimeout(() => tg.HapticFeedback.impactOccurred('medium'), 200);
                 }
+
+                // Автоматически закрыть Web App через 2 секунды
+                setTimeout(() => {
+                    tg.close();
+                }, 2000);
             }, 500);
         }
 
