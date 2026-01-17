@@ -6,7 +6,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from datetime import date
 
-from utils import error_handler, practices_manager
+from utils import practices_manager
 from utils.db import update_user_progress
 from models import SessionLocal, User
 
@@ -54,7 +54,6 @@ def _get_stage5_step_by_type(practice, step_type: str):
     return None
 
 
-@error_handler
 async def handle_stage5_start_substep(query, user, db):
     """
     Начать подшаги Stage 5 (переход от напоминания к первому подшагу - question)
@@ -99,7 +98,6 @@ async def handle_stage5_start_substep(query, user, db):
     logger.info(f"Пользователь {user.telegram_id} начал подшаг 'question' дня {current_day} (Stage 5)")
 
 
-@error_handler
 async def handle_stage5_next_substep(query, user, db):
     """
     Переход к следующему подшагу Stage 5 (question → feeling → affirmation → completion)

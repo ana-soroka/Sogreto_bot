@@ -11,6 +11,7 @@ from utils.db import get_or_create_user, update_user_progress
 from models import SessionLocal, User
 from handlers.admin import is_admin, ADMIN_IDS
 from utils.scheduler import send_daily_practice_reminder
+from handlers.practices_stage5 import handle_stage5_start_substep, handle_stage5_next_substep
 
 logger = logging.getLogger(__name__)
 
@@ -439,6 +440,10 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_complete_day4_practice(query, user, db, context)
         elif action == "test_stage4_reminder":
             await handle_test_stage4_reminder(query, user, db, context)
+        elif action == "stage5_start_substep":
+            await handle_stage5_start_substep(query, user, db)
+        elif action == "stage5_next_substep":
+            await handle_stage5_next_substep(query, user, db)
         else:
             await query.edit_message_text(
                 f"Действие '{action}' пока не реализовано.\n"
