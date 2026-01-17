@@ -51,6 +51,12 @@ class User(Base):
     reminder_postponed = Column(Boolean, default=False)  # Напоминание отложено
     postponed_until = Column(DateTime, nullable=True)  # Время отложенного напоминания
 
+    # Stage 4 напоминание (практика "Якорь")
+    stage4_reminder_date = Column(String(10), nullable=True)  # YYYY-MM-DD формат, дата напоминания о Stage 4
+
+    # Stage 6 напоминание (финальный этап)
+    stage6_reminder_date = Column(String(10), nullable=True)  # YYYY-MM-DD формат
+
     # Настройки
     timezone = Column(String(50), default='Europe/Moscow')
     reminder_time = Column(String(5), default='09:00')  # Старое поле (deprecated)

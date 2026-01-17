@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from models import SessionLocal, User
 from handlers.admin import ADMIN_IDS
-from utils.scheduler import send_daily_practice_reminder, send_stage4_reminder, send_stage5_daily_reminder
+from utils.scheduler import send_daily_practice_reminder, send_stage4_reminder, send_stage5_daily_reminder, send_stage6_reminder
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,8 @@ async def handle_admin_test_callback(update: Update, context: ContextTypes.DEFAU
                 f"• День: {db_user.current_day}\n"
                 f"• Daily practice day: {db_user.daily_practice_day}\n"
                 f"• Daily substep: {db_user.daily_practice_substep or '(нет)'}\n"
-                f"• Stage 4 reminder: {db_user.stage4_reminder_date or '(не установлено)'}\n\n"
+                f"• Stage 4 reminder: {db_user.stage4_reminder_date or '(не установлено)'}\n"
+                f"• Stage 6 reminder: {db_user.stage6_reminder_date or '(не установлено)'}\n\n"
                 f"**Выберите тест:**"
             )
 
@@ -53,6 +54,8 @@ async def handle_admin_test_callback(update: Update, context: ContextTypes.DEFAU
                 [InlineKeyboardButton("🧪 Тест: День 3 (Stage 3)", callback_data="admin_test_day3")],
                 [InlineKeyboardButton("🧪 Тест: День 4 (Stage 3)", callback_data="admin_test_day4")],
                 [InlineKeyboardButton("🧪 Тест: Якорь (Stage 4)", callback_data="admin_test_stage4")],
+                [InlineKeyboardButton("🧪 Тест: День 1-7 (Stage 5)", callback_data="admin_test_stage5_menu")],
+                [InlineKeyboardButton("🧪 Тест: Финал (Stage 6)", callback_data="admin_test_stage6")],
                 [InlineKeyboardButton("📊 Обновить статус", callback_data="admin_refresh_status")],
             ]
 
@@ -138,6 +141,15 @@ async def handle_admin_test_callback(update: Update, context: ContextTypes.DEFAU
             await send_stage5_daily_reminder(context.bot, db_user, db)
             await query.answer(f"✅ Отправлено напоминание День {day_num} (Stage 5)!", show_alert=True)
             logger.info(f"Администратор {user.id} отправил тест Stage 5 день {day_num}")
+
+        elif action == "admin_test_stage6":
+            # Тест напоминания Stage 6 (Финал)
+            db_user.current_stage = 6
+            db_user.current_step = 24
+            db.commit()
+            await send_stage6_reminder(context.bot, db_user, db)
+            await query.answer("✅ Отправлено напоминание Stage 6 (Финал)!", show_alert=True)
+            logger.info(f"Администратор {user.id} отправил тест Stage 6")
 
     except Exception as e:
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)

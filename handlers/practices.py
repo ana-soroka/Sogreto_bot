@@ -444,6 +444,8 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_stage5_start_substep(query, user, db)
         elif action == "stage5_next_substep":
             await handle_stage5_next_substep(query, user, db)
+        elif action == "start_stage6_finale":
+            await handle_start_stage6_finale(query, user, db)
         else:
             await query.edit_message_text(
                 f"Действие '{action}' пока не реализовано.\n"
@@ -1353,3 +1355,43 @@ async def handle_test_stage4_reminder(query, user, db, context):
         logger.error(f"Ошибка при отправке тестового напоминания Stage 4 для админа {user.telegram_id}: {e}")
 
 
+async def handle_start_stage6_finale(query, user, db):
+    """
+    Начать финальные практики Stage 6 с первого шага (Step 24)
+
+    Показывает Step 24 с его контентом из practices.json
+    """
+    logger.info(f"Пользователь {user.telegram_id} начинает финальные практики Stage 6")
+
+    # Убедиться что пользователь на Stage 6
+    if user.current_stage != 6:
+        from utils.db import update_user_progress
+        update_user_progress(db, user.telegram_id, stage_id=6, step_id=24, day=user.current_day)
+
+    # Получить Step 24
+    stage = practices_manager.get_stage(6)
+    if not stage:
+        await query.edit_message_text("Ошибка: Stage 6 не найден")
+        return
+
+    steps = stage.get('steps', [])
+    step = None
+    for s in steps:
+        if s.get('step_id') == 24:
+            step = s
+            break
+
+    if not step:
+        await query.edit_message_text("Ошибка: Step 24 не найден")
+        return
+
+    # Показать Step 24
+    message = f"**{step.get('title', '')}**\n\n{step.get('message', '')}"
+
+    # Создать кнопки из practices.json
+    buttons_data = step.get('buttons', [])
+    keyboard = create_practice_keyboard(buttons_data)
+
+    await query.edit_message_text(message, reply_markup=keyboard, parse_mode='Markdown')
+
+    logger.info(f"Пользователь {user.telegram_id} начал Step 24 (Stage 6)")

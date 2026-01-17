@@ -182,8 +182,16 @@ async def _complete_stage5_day(query, user, db, practice):
 
     # Проверить, был ли это последний день (день 7)
     if current_day >= 7:
+        from datetime import timedelta
+
         # Переход к Stage 6 (Финал)
         update_user_progress(db, user.telegram_id, stage_id=6, step_id=24, day=user.current_day)
+
+        # Установить напоминание на следующий день
+        tomorrow = (date.today() + timedelta(days=1)).strftime('%Y-%m-%d')
+        user.stage6_reminder_date = tomorrow
+
+        # Сбросить поля Stage 5
         user.daily_practice_day = 0
         user.daily_practice_substep = ""
         user.last_practice_date = None

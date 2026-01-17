@@ -337,6 +337,59 @@ async def send_stage4_reminder(bot: Bot, user, db):
         logger.error(f"Ошибка при отправке напоминания Stage 4 пользователю {user.telegram_id}: {e}")
 
 
+async def send_stage6_reminder(bot: Bot, user, db):
+    """
+    Отправить напоминание о начале финальных практик Stage 6
+
+    Напоминание отправляется один раз на следующий день после завершения Stage 5.
+    Пользователь проходит все 7 шагов (24-30) подряд за один раз.
+    """
+    # Получить Step 24 (первый шаг Stage 6)
+    stage = practices_manager.get_stage(6)
+    if not stage:
+        logger.error("Stage 6 не найден в practices.json")
+        return
+
+    steps = stage.get('steps', [])
+    first_step = None
+    for step in steps:
+        if step.get('step_id') == 24:
+            first_step = step
+            break
+
+    if not first_step:
+        logger.error("Step 24 не найден в Stage 6")
+        return
+
+    # Сформировать сообщение
+    message = "🎉 **Финальный этап!**\n\n"
+    message += "Твой беби-лиф готов! Время завершить практику и насладиться результатом.\n\n"
+    message += f"**{first_step.get('title', 'Признание мастерства')}**\n\n"
+    message += "Сегодня мы пройдём все финальные шаги подряд. Приготовься к празднованию своего успеха! 🌱"
+
+    # Кнопка для начала с Step 24
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Приступить к финалу", callback_data="start_stage6_finale")]
+    ])
+
+    try:
+        await bot.send_message(
+            chat_id=user.telegram_id,
+            text=message,
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+
+        # Очистить stage6_reminder_date после отправки
+        user.stage6_reminder_date = None
+        db.commit()
+
+        logger.info(f"Отправлено напоминание Stage 6 (финал) пользователю {user.telegram_id}")
+
+    except Exception as e:
+        logger.error(f"Ошибка отправки напоминания Stage 6 пользователю {user.telegram_id}: {e}")
+
+
 async def send_daily_practice_reminder(bot: Bot, user, db):
     """
     Отправить короткое напоминание о ежедневной практике (Stage 3)
@@ -549,6 +602,22 @@ async def check_and_send_reminders(bot: Bot):
                                 db.commit()
 
                                 logger.info(f"Отправлено напоминание о Stage 4 пользователю {user.telegram_id}")
+                                continue
+
+                        # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ НАПОМИНАНИЯ О STAGE 6 (Финальный этап)
+                        if user.stage6_reminder_date:
+                            today_str = now_user_tz.date().strftime('%Y-%m-%d')
+
+                            # Если сегодня день напоминания о Stage 6
+                            if user.stage6_reminder_date == today_str:
+                                # Отправить напоминание о Stage 6
+                                await send_stage6_reminder(bot, user, db)
+
+                                # Обновить время последнего напоминания
+                                user.last_reminder_sent = now_utc
+                                db.commit()
+
+                                logger.info(f"Отправлено напоминание о Stage 6 пользователю {user.telegram_id}")
                                 continue
 
                         # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЕЖЕДНЕВНЫХ ПРАКТИК STAGE 5 (До беби-лифа)
