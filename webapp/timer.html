@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Медитация 🌱</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            padding: 20px;
+            max-width: 400px;
+            width: 100%;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            opacity: 0;
+            animation: fadeIn 0.5s ease forwards;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+            margin-bottom: 40px;
+            opacity: 0;
+            animation: fadeIn 0.5s ease 0.2s forwards;
+        }
+
+        .timer-circle {
+            position: relative;
+            width: 250px;
+            height: 250px;
+            margin: 0 auto 40px;
+            opacity: 0;
+            animation: fadeIn 0.5s ease 0.4s forwards;
+        }
+
+        .timer-circle svg {
+            transform: rotate(-90deg);
+            width: 100%;
+            height: 100%;
+        }
+
+        .timer-circle-bg {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.2);
+            stroke-width: 8;
+        }
+
+        .timer-circle-progress {
+            fill: none;
+            stroke: #4ade80;
+            stroke-width: 8;
+            stroke-linecap: round;
+            stroke-dasharray: 754;
+            stroke-dashoffset: 0;
+            transition: stroke-dashoffset 1s linear;
+        }
+
+        .timer-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 64px;
+            font-weight: 700;
+            text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .message {
+            font-size: 18px;
+            font-weight: 500;
+            opacity: 0.95;
+            margin-bottom: 20px;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            animation: fadeIn 0.5s ease 0.6s forwards;
+        }
+
+        .breath-indicator {
+            font-size: 32px;
+            margin-bottom: 20px;
+            opacity: 0;
+            animation: breathe 4s ease-in-out infinite;
+        }
+
+        .complete-message {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            opacity: 0;
+            transform: scale(0.8);
+        }
+
+        .complete-message.show {
+            animation: popIn 0.5s ease forwards;
+        }
+
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes breathe {
+            0%, 100% {
+                opacity: 0.3;
+                transform: scale(0.9);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1.1);
+            }
+        }
+
+        @keyframes popIn {
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        .pulsing {
+            animation: pulse 0.5s ease-in-out 3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">🌱 Медитация</div>
+        <div class="subtitle">Минута осознанности</div>
+
+        <div class="timer-circle">
+            <svg viewBox="0 0 250 250">
+                <circle class="timer-circle-bg" cx="125" cy="125" r="120"></circle>
+                <circle class="timer-circle-progress" cx="125" cy="125" r="120" id="progress"></circle>
+            </svg>
+            <div class="timer-text" id="timer">1:00</div>
+        </div>
+
+        <div class="breath-indicator" id="breathIndicator">🌬️</div>
+        <div class="message" id="message">Просто дыши...</div>
+        <div class="complete-message" id="completeMessage">✅ Минута прошла!</div>
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        // Настройка цветов темы
+        document.body.style.background = tg.themeParams.bg_color || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+
+        // Элементы
+        const timerText = document.getElementById('timer');
+        const progressCircle = document.getElementById('progress');
+        const messageEl = document.getElementById('message');
+        const breathIndicator = document.getElementById('breathIndicator');
+        const completeMessage = document.getElementById('completeMessage');
+        const timerCircle = document.querySelector('.timer-circle');
+
+        // Константы
+        const DURATION = 60; // секунды
+        const CIRCUMFERENCE = 2 * Math.PI * 120; // радиус 120
+        let timeLeft = DURATION;
+        let intervalId;
+
+        // Массив мотивационных сообщений
+        const messages = [
+            'Просто дыши...',
+            'Замечай свои ощущения',
+            'Ты здесь и сейчас',
+            'Позволь мыслям проплывать',
+            'Наблюдай за своим дыханием',
+            'Чувствуй момент',
+            'Отпусти напряжение',
+            'Ты в безопасности'
+        ];
+        let currentMessageIndex = 0;
+
+        // Функция форматирования времени
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Функция обновления прогресса
+        function updateProgress() {
+            const progress = timeLeft / DURATION;
+            const offset = CIRCUMFERENCE * (1 - progress);
+            progressCircle.style.strokeDashoffset = offset;
+        }
+
+        // Функция смены сообщений
+        function cycleMessages() {
+            currentMessageIndex = (currentMessageIndex + 1) % messages.length;
+            messageEl.style.opacity = '0';
+            setTimeout(() => {
+                messageEl.textContent = messages[currentMessageIndex];
+                messageEl.style.opacity = '0.95';
+            }, 300);
+        }
+
+        // Функция завершения таймера
+        function completeTimer() {
+            clearInterval(intervalId);
+
+            // Скрыть таймер и индикатор дыхания
+            timerCircle.style.opacity = '0';
+            breathIndicator.style.opacity = '0';
+            messageEl.style.opacity = '0';
+
+            // Показать сообщение о завершении
+            setTimeout(() => {
+                completeMessage.classList.add('show');
+
+                // Вибрация (3 коротких)
+                if (tg.HapticFeedback) {
+                    tg.HapticFeedback.notificationOccurred('success');
+                    setTimeout(() => tg.HapticFeedback.impactOccurred('medium'), 100);
+                    setTimeout(() => tg.HapticFeedback.impactOccurred('medium'), 200);
+                }
+
+                // Закрыть Web App через 2 секунды
+                setTimeout(() => {
+                    tg.close();
+                }, 2000);
+            }, 500);
+        }
+
+        // Основной таймер
+        function startTimer() {
+            intervalId = setInterval(() => {
+                timeLeft--;
+                timerText.textContent = formatTime(timeLeft);
+                updateProgress();
+
+                // Смена сообщений каждые 10 секунд
+                if (timeLeft % 10 === 0 && timeLeft > 0) {
+                    cycleMessages();
+                }
+
+                // Предупреждение за 5 секунд
+                if (timeLeft === 5) {
+                    timerCircle.classList.add('pulsing');
+                    if (tg.HapticFeedback) {
+                        tg.HapticFeedback.impactOccurred('light');
+                    }
+                }
+
+                // Завершение
+                if (timeLeft <= 0) {
+                    completeTimer();
+                }
+            }, 1000);
+        }
+
+        // Инициализация прогресса
+        progressCircle.style.strokeDasharray = CIRCUMFERENCE;
+        progressCircle.style.strokeDashoffset = 0;
+
+        // Запуск таймера через 1 секунду после загрузки
+        setTimeout(() => {
+            startTimer();
+        }, 1000);
+
+        // Обработка закрытия Web App
+        window.addEventListener('beforeunload', () => {
+            clearInterval(intervalId);
+        });
+    </script>
+</body>
+</html>

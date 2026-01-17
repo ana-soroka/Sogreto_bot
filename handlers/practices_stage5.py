@@ -2,7 +2,7 @@
 Обработчики для Stage 5 (До беби-лифа) - ежедневные практики с долгосрочными целями
 """
 import logging
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes
 from datetime import date
 
@@ -11,6 +11,9 @@ from utils.db import update_user_progress
 from models import SessionLocal, User
 
 logger = logging.getLogger(__name__)
+
+# URL для Web App таймера (после включения GitHub Pages)
+TIMER_WEBAPP_URL = "https://ana-soroka.github.io/Sogreto_bot/webapp/timer.html"
 
 
 def _get_stage5_daily_practice(day: int):
@@ -151,15 +154,20 @@ async def handle_stage5_next_substep(query, user, db):
 
     # Кнопка
     if next_substep == "timer":
-        button_text = "Минута прошла"
-    elif next_substep == "affirmation":
-        button_text = "Принято. До завтра" if current_day < 7 else "Перейти к празднику зрелости"
-    elif next_substep == "watering":
-        button_text = "Ага"
+        # Для таймера используем Web App
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⏱ Запустить таймер", web_app=WebAppInfo(url=TIMER_WEBAPP_URL))]
+        ])
+    else:
+        # Для остальных подшагов обычные кнопки
+        if next_substep == "affirmation":
+            button_text = "Принято. До завтра" if current_day < 7 else "Перейти к празднику зрелости"
+        elif next_substep == "watering":
+            button_text = "Ага"
 
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(button_text, callback_data="stage5_next_substep")]
-    ])
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(button_text, callback_data="stage5_next_substep")]
+        ])
 
     await query.edit_message_text(message, reply_markup=keyboard, parse_mode='Markdown')
 
