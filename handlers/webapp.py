@@ -17,12 +17,23 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     Когда таймер завершается, Web App отправляет данные боту,
     и этот обработчик автоматически показывает следующий шаг
     """
+    logger.info(f"=== Web App handler вызван!")
+    logger.info(f"Update type: {type(update)}")
+    logger.info(f"Has effective_message: {hasattr(update, 'effective_message')}")
+    if hasattr(update, 'effective_message') and update.effective_message:
+        logger.info(f"Message: {update.effective_message}")
+        logger.info(f"Has web_app_data: {hasattr(update.effective_message, 'web_app_data')}")
+
     try:
         # Получить данные из Web App
+        if not update.effective_message or not update.effective_message.web_app_data:
+            logger.error("Нет web_app_data в update!")
+            return
+
         data = json.loads(update.effective_message.web_app_data.data)
         user_id = update.effective_user.id
 
-        logger.info(f"Получены данные из Web App от пользователя {user_id}: {data}")
+        logger.info(f"✅ Получены данные из Web App от пользователя {user_id}: {data}")
 
         # Проверить, что это завершение таймера
         if data.get('action') == 'timer_completed':

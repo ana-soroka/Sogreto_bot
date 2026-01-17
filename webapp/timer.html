@@ -255,11 +255,17 @@
                     setTimeout(() => tg.HapticFeedback.impactOccurred('medium'), 200);
                 }
 
-                // Отправить данные боту и закрыть Web App через 2 секунды
+                // Отправить данные боту через 1 секунду
+                // sendData() автоматически закрывает Web App
                 setTimeout(() => {
-                    // Отправить событие завершения таймера
-                    tg.sendData(JSON.stringify({ action: 'timer_completed' }));
-                }, 2000);
+                    try {
+                        tg.sendData(JSON.stringify({ action: 'timer_completed' }));
+                    } catch (e) {
+                        console.error('Ошибка sendData:', e);
+                        // Если sendData не сработал, просто закрыть
+                        tg.close();
+                    }
+                }, 1000);
             }, 500);
         }
 
