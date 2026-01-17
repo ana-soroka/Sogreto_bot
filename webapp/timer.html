@@ -255,9 +255,10 @@
                     setTimeout(() => tg.HapticFeedback.impactOccurred('medium'), 200);
                 }
 
-                // Закрыть Web App через 2 секунды
+                // Отправить данные боту и закрыть Web App через 2 секунды
                 setTimeout(() => {
-                    tg.close();
+                    // Отправить событие завершения таймера
+                    tg.sendData(JSON.stringify({ action: 'timer_completed' }));
                 }, 2000);
             }, 500);
         }

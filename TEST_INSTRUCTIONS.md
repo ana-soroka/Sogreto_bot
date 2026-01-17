@@ -42,7 +42,9 @@ python test_reminders.py simulate ВАШ_ID 2
 
 **Пример:**
 ```powershell
-python test_reminders.py simulate 1585940117 2
+
+
+
 ```
 
 **Что произойдёт:**

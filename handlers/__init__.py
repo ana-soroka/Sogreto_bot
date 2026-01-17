@@ -11,6 +11,7 @@ from .settings import (
     handle_timezone_callback
 )
 from .admin import reload_practices_command
+from .webapp import handle_web_app_data
 
 __all__ = [
     # Start handlers
@@ -36,4 +37,6 @@ __all__ = [
     'handle_timezone_callback',
     # Admin
     'reload_practices_command',
+    # WebApp
+    'handle_web_app_data',
 ]

@@ -40,6 +40,7 @@ from handlers import (
     handle_time_callback,
     handle_timezone_callback,
     reload_practices_command,
+    handle_web_app_data,
 )
 from handlers.admin import admin_test_command
 from handlers.admin_test import handle_admin_test_callback
@@ -159,6 +160,9 @@ def main():
     application.add_handler(CallbackQueryHandler(handle_admin_test_callback, pattern="^(admin_test_day[1-4]|admin_test_stage4|admin_test_stage5_menu|admin_test_stage5_day[1-7]|admin_test_stage6|admin_refresh_status)$"))
     application.add_handler(CallbackQueryHandler(handle_time_callback, pattern="^time_"))
     application.add_handler(CallbackQueryHandler(handle_timezone_callback, pattern="^tz_"))
+
+    # Обработчик Web App данных (должен быть перед текстовыми обработчиками)
+    application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
 
     # Обработчик неизвестных команд
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
