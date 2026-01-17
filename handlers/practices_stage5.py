@@ -13,7 +13,7 @@ from models import SessionLocal, User
 logger = logging.getLogger(__name__)
 
 # URL для Web App таймера (с версией для обхода кеша)
-TIMER_WEBAPP_URL = "https://ana-soroka.github.io/Sogreto_bot/webapp/timer.html?v=4"
+TIMER_WEBAPP_URL = "https://ana-soroka.github.io/Sogreto_bot/webapp/timer.html?v=5"
 
 
 def _get_stage5_daily_practice(day: int):
