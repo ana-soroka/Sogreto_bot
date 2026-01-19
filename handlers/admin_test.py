@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from models import SessionLocal, User
 from handlers.admin import ADMIN_IDS
-from utils.scheduler import send_daily_practice_reminder, send_stage4_reminder, send_stage5_daily_reminder, send_stage6_reminder
+from utils.scheduler import send_daily_practice_reminder, send_stage4_reminder, send_stage5_daily_reminder, send_stage6_reminder, send_stage2_sprouts_reminder
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,7 @@ async def handle_admin_test_callback(update: Update, context: ContextTypes.DEFAU
             )
 
             keyboard = [
+                [InlineKeyboardButton("🧪 Тест: Всходы (Stage 2)", callback_data="admin_test_stage2_menu")],
                 [InlineKeyboardButton("🧪 Тест: День 1 (Stage 3)", callback_data="admin_test_day1")],
                 [InlineKeyboardButton("🧪 Тест: День 2 (Stage 3)", callback_data="admin_test_day2")],
                 [InlineKeyboardButton("🧪 Тест: День 3 (Stage 3)", callback_data="admin_test_day3")],
@@ -150,6 +151,39 @@ async def handle_admin_test_callback(update: Update, context: ContextTypes.DEFAU
             await send_stage6_reminder(context.bot, db_user, db)
             await query.answer("✅ Отправлено напоминание Stage 6 (Финал)!", show_alert=True)
             logger.info(f"Администратор {user.id} отправил тест Stage 6")
+
+        elif action == "admin_test_stage2_menu":
+            # Показать подменю для выбора дня Stage 2 (всходы)
+            status_text = (
+                f"🛠 **Тест Stage 2 (Всходы)**\n\n"
+                f"**Текущее состояние:**\n"
+                f"• Этап: {db_user.current_stage}\n"
+                f"• Шаг: {db_user.current_step}\n"
+                f"• awaiting\\_sprouts: {db_user.awaiting_sprouts}\n\n"
+                f"**Выберите день для тестирования:**"
+            )
+
+            keyboard = [
+                [InlineKeyboardButton("День 2: Проверка всходов", callback_data="admin_test_stage2_day2")],
+                [InlineKeyboardButton("День 3: Напоминание", callback_data="admin_test_stage2_day3")],
+                [InlineKeyboardButton("День 4: Ещё напоминание", callback_data="admin_test_stage2_day4")],
+                [InlineKeyboardButton("День 5: Салат не взошёл?", callback_data="admin_test_stage2_day5")],
+                [InlineKeyboardButton("← Назад", callback_data="admin_refresh_status")],
+            ]
+
+            await query.edit_message_text(
+                status_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+            logger.info(f"Администратор {user.id} открыл меню Stage 2")
+
+        elif action.startswith("admin_test_stage2_day"):
+            # Тест напоминания Stage 2 для конкретного дня
+            day_num = int(action.replace("admin_test_stage2_day", ""))
+            await send_stage2_sprouts_reminder(context.bot, db_user, db, day_num)
+            await query.answer(f"✅ Отправлено напоминание День {day_num} (Stage 2)!", show_alert=True)
+            logger.info(f"Администратор {user.id} отправил тест Stage 2 день {day_num}")
 
     except Exception as e:
         await query.answer(f"❌ Ошибка: {str(e)}", show_alert=True)

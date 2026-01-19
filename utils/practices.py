@@ -126,6 +126,10 @@ class PracticesManager:
         """Получить информацию о расписании"""
         return self.data.get('schedule', {})
 
+    def get_replant_scenario(self) -> Optional[Dict]:
+        """Получить сценарий 'Салат не взошёл'"""
+        return self.data.get('replant_scenario')
+
     def get_total_stages(self) -> int:
         """Получить общее количество этапов"""
         stages = self.data.get('practice_structure', {}).get('stages', [])

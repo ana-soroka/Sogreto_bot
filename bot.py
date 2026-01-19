@@ -25,6 +25,7 @@ from utils.scheduler import init_scheduler, schedule_user_reminders, stop_schedu
 from handlers import (
     start_command,
     help_command,
+    handle_start_callback,
     status_command,
     pause_command,
     resume_command,
@@ -156,10 +157,11 @@ def main():
 
     # Обработчик нажатий на кнопки (callback_query)
     # Используем паттерны для разных типов кнопок
-    application.add_handler(CallbackQueryHandler(handle_practice_callback, pattern="^(next_step|prev_step|complete_stage|show_examples_menu|toggle_category_.*|continue_from_examples|show_recipes|expand_recipe_.*|collapse_recipe_.*|show_manifesto|start_daily_practices|sprouts_appeared|continue_practice|confirm_reset|cancel_reset|test_daily_reminder|start_daily_substep|next_daily_substep|daily_choice_A|daily_choice_B|complete_day4_practice|test_stage4_reminder|postpone_reminder|start_waiting_for_daily|stage5_start_substep|stage5_next_substep|start_stage6_finale)$"))
-    application.add_handler(CallbackQueryHandler(handle_admin_test_callback, pattern="^(admin_test_day[1-4]|admin_test_stage4|admin_test_stage5_menu|admin_test_stage5_day[1-7]|admin_test_stage6|admin_refresh_status)$"))
+    application.add_handler(CallbackQueryHandler(handle_practice_callback, pattern="^(next_step|prev_step|complete_stage|show_examples_menu|toggle_category_.*|continue_from_examples|show_recipes|expand_recipe_.*|collapse_recipe_.*|show_manifesto|start_daily_practices|sprouts_appeared|continue_practice|confirm_reset|cancel_reset|test_daily_reminder|start_daily_substep|next_daily_substep|daily_choice_A|daily_choice_B|complete_day4_practice|test_stage4_reminder|postpone_reminder|start_waiting_for_daily|stage5_start_substep|stage5_next_substep|start_stage6_finale|stage1_tz_.*|stage1_time_.*|replant_start|replant_step_\\d+|replant_complete)$"))
+    application.add_handler(CallbackQueryHandler(handle_admin_test_callback, pattern="^(admin_test_day[1-4]|admin_test_stage4|admin_test_stage5_menu|admin_test_stage5_day[1-7]|admin_test_stage6|admin_test_stage2_menu|admin_test_stage2_day[2-5]|admin_refresh_status)$"))
     application.add_handler(CallbackQueryHandler(handle_time_callback, pattern="^time_"))
     application.add_handler(CallbackQueryHandler(handle_timezone_callback, pattern="^tz_"))
+    application.add_handler(CallbackQueryHandler(handle_start_callback, pattern="^start_"))
 
     # Обработчик Web App данных (должен быть перед текстовыми обработчиками)
     application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))

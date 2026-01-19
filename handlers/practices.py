@@ -446,6 +446,17 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_stage5_next_substep(query, user, db)
         elif action == "start_stage6_finale":
             await handle_start_stage6_finale(query, user, db)
+        elif action.startswith("stage1_tz_"):
+            await handle_stage1_timezone(query, user, db, action)
+        elif action.startswith("stage1_time_"):
+            await handle_stage1_time(query, user, db, action)
+        elif action == "replant_start":
+            await handle_replant_start(query, user, db)
+        elif action.startswith("replant_step_"):
+            step_id = int(action.split("_")[-1])
+            await handle_replant_step(query, user, db, step_id)
+        elif action == "replant_complete":
+            await handle_replant_complete(query, user, db)
         else:
             await query.edit_message_text(
                 f"Действие '{action}' пока не реализовано.\n"
@@ -561,31 +572,30 @@ async def handle_complete_stage(query, user, db):
     """Завершить текущий этап и перейти к следующему"""
     current_stage = user.current_stage
 
-    # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЭТАПА 1: не переходим сразу на этап 2
+    # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЭТАПА 1: сначала настройка часового пояса и времени
     if current_stage == 1:
         # Установить флаг ожидания всходов
         user.awaiting_sprouts = True
         db.commit()
 
-        # Показать сообщение с кнопкой
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌱 Появились первые всходы!", callback_data="sprouts_appeared")]
-        ])
+        # Сначала показать выбор часового пояса
+        keyboard = [
+            [InlineKeyboardButton("🇷🇺 Москва (UTC+3)", callback_data="stage1_tz_Europe/Moscow")],
+            [InlineKeyboardButton("🇷🇺 Екатеринбург (UTC+5)", callback_data="stage1_tz_Asia/Yekaterinburg")],
+            [InlineKeyboardButton("🇷🇺 Новосибирск (UTC+7)", callback_data="stage1_tz_Asia/Novosibirsk")],
+            [InlineKeyboardButton("🇷🇺 Владивосток (UTC+10)", callback_data="stage1_tz_Asia/Vladivostok")],
+            [InlineKeyboardButton("🇰🇿 Алматы (UTC+6)", callback_data="stage1_tz_Asia/Almaty")],
+            [InlineKeyboardButton("🇧🇾 Минск (UTC+3)", callback_data="stage1_tz_Europe/Minsk")],
+        ]
 
         await query.edit_message_text(
-            f"🎉 **Этап 1 завершён!**\n\n"
-            f"Отличная работа! Семена посажены, и теперь начинается самое волнующее — ожидание.\n\n"
-            f"Обычно первые всходы появляются через **2-4 дня**.\n\n"
-            f"💡 **Что делать:**\n"
-            f"• Проверяй горшок каждый день\n"
-            f"• Следи за влажностью почвы\n"
-            f"• Держи горшок под плёнкой\n\n"
-            f"Как только увидишь первые зелёные петельки — нажми кнопку ниже, и мы продолжим! 🌱\n\n"
-            f"_Я буду присылать напоминания проверить всходы._",
-            reply_markup=keyboard,
+            f"🌍 **Настройка часового пояса**\n\n"
+            f"Прежде чем продолжить, давай настроим напоминания!\n\n"
+            f"Выбери свой часовой пояс, чтобы напоминания приходили вовремя:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
-        logger.info(f"Пользователь {user.telegram_id} завершил этап 1, ожидает всходы")
+        logger.info(f"Пользователь {user.telegram_id} завершил этап 1, выбирает часовой пояс")
         return
 
     # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЭТАПА 2: переход к ежедневным практикам этапа 3
@@ -660,6 +670,81 @@ async def handle_complete_stage(query, user, db):
             f"Используйте /status чтобы увидеть итоги."
         )
         logger.info(f"Пользователь {user.telegram_id} завершил ВСЕ практики!")
+
+
+async def handle_stage1_timezone(query, user, db, action):
+    """Обработать выбор часового пояса после завершения этапа 1"""
+    # Извлечь timezone из action (формат: "stage1_tz_Region/City")
+    timezone_str = action.replace("stage1_tz_", "")
+
+    # Сохранить timezone в БД
+    user.timezone = timezone_str
+    db.commit()
+
+    logger.info(f"Пользователь {user.telegram_id} выбрал часовой пояс: {timezone_str}")
+
+    # Показать выбор времени напоминаний
+    keyboard = [
+        [
+            InlineKeyboardButton("09:00", callback_data="stage1_time_09:00"),
+            InlineKeyboardButton("10:00", callback_data="stage1_time_10:00"),
+            InlineKeyboardButton("11:00", callback_data="stage1_time_11:00"),
+        ],
+        [
+            InlineKeyboardButton("12:00", callback_data="stage1_time_12:00"),
+            InlineKeyboardButton("13:00", callback_data="stage1_time_13:00"),
+            InlineKeyboardButton("14:00", callback_data="stage1_time_14:00"),
+        ],
+        [
+            InlineKeyboardButton("18:00", callback_data="stage1_time_18:00"),
+            InlineKeyboardButton("19:00", callback_data="stage1_time_19:00"),
+            InlineKeyboardButton("20:00", callback_data="stage1_time_20:00"),
+        ],
+        [
+            InlineKeyboardButton("21:00", callback_data="stage1_time_21:00"),
+            InlineKeyboardButton("22:00", callback_data="stage1_time_22:00"),
+        ],
+    ]
+
+    await query.edit_message_text(
+        f"⏰ **Настройка времени напоминаний**\n\n"
+        f"Часовой пояс: **{timezone_str}** ✓\n\n"
+        f"Теперь выбери время, в которое тебе удобно получать напоминания о проверке всходов:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
+
+async def handle_stage1_time(query, user, db, action):
+    """Обработать выбор времени напоминаний после завершения этапа 1"""
+    # Извлечь время из action (формат: "stage1_time_HH:MM")
+    time_str = action.replace("stage1_time_", "")
+
+    # Сохранить время в БД
+    user.preferred_time = time_str
+    db.commit()
+
+    logger.info(f"Пользователь {user.telegram_id} выбрал время напоминаний: {time_str}")
+
+    # Показать финальное сообщение о завершении этапа 1
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🌱 Появились первые всходы!", callback_data="sprouts_appeared")]
+    ])
+
+    await query.edit_message_text(
+        f"🎉 **Этап 1 завершён!**\n\n"
+        f"Отличная работа! Семена посажены, и теперь начинается самое волнующее — ожидание.\n\n"
+        f"⏰ Напоминания настроены: **{time_str}** ({user.timezone})\n\n"
+        f"Обычно первые всходы появляются через **2-4 дня**.\n\n"
+        f"💡 **Что делать:**\n"
+        f"• Проверяй горшок каждый день\n"
+        f"• Следи за влажностью почвы\n"
+        f"• Держи горшок под плёнкой\n\n"
+        f"Как только увидишь первые зелёные петельки — нажми кнопку ниже, и мы продолжим! 🌱\n\n"
+        f"_Я буду присылать напоминания проверить всходы._",
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
 
 
 async def handle_sprouts_appeared(query, user, db):
@@ -938,7 +1023,6 @@ async def handle_sprouts_appeared(query, user, db):
 
     # Сформировать сообщение
     message = "🎉 **Отлично! Ваши всходы появились!**\n\n"
-    message += f"Переходим к **{stage2['stage_name']}**\n\n"
     message += f"**{first_step.get('title', '')}**\n\n"
     message += first_step.get('message', '')
 
@@ -1395,3 +1479,62 @@ async def handle_start_stage6_finale(query, user, db):
     await query.edit_message_text(message, reply_markup=keyboard, parse_mode='Markdown')
 
     logger.info(f"Пользователь {user.telegram_id} начал Step 24 (Stage 6)")
+
+
+# ==================== СЦЕНАРИЙ "САЛАТ НЕ ВЗОШЁЛ" ====================
+
+async def handle_replant_start(query, user, db):
+    """Начать сценарий 'Салат не взошёл' - показать шаг 1"""
+    logger.info(f"Пользователь {user.telegram_id} начал сценарий 'Салат не взошёл'")
+    await handle_replant_step(query, user, db, 1)
+
+
+async def handle_replant_step(query, user, db, step_id: int):
+    """Показать указанный шаг сценария 'Салат не взошёл'"""
+    replant = practices_manager.get_replant_scenario()
+    if not replant:
+        await query.edit_message_text("Ошибка: сценарий не найден")
+        return
+
+    step = None
+    for s in replant.get('steps', []):
+        if s.get('step_id') == step_id:
+            step = s
+            break
+
+    if not step:
+        await query.edit_message_text(f"Ошибка: шаг {step_id} не найден")
+        return
+
+    message = f"**{step.get('title', '')}**\n\n{step.get('message', '')}"
+    keyboard = create_practice_keyboard(step.get('buttons', []))
+
+    await query.edit_message_text(message, reply_markup=keyboard, parse_mode='Markdown')
+    logger.info(f"Пользователь {user.telegram_id} на шаге {step_id} сценария 'Салат не взошёл'")
+
+
+async def handle_replant_complete(query, user, db):
+    """Завершить сценарий и вернуть в режим ожидания всходов"""
+    from datetime import datetime
+
+    logger.info(f"Пользователь {user.telegram_id} завершает сценарий 'Салат не взошёл'")
+
+    # Сбросить состояние на ожидание всходов
+    user.awaiting_sprouts = True
+    user.started_at = datetime.utcnow()  # Сбросить таймер
+    db.commit()
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Всходы появились!", callback_data="sprouts_appeared")]
+    ])
+
+    await query.edit_message_text(
+        "🌱 **Семена посажены заново!**\n\n"
+        "Таймер сброшен. Жди новых всходов — обычно они появляются через 2-4 дня.\n\n"
+        "Я буду присылать напоминания проверить горшок.\n\n"
+        "Как только увидишь первые зелёные петельки — нажми кнопку! 🌱",
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
+
+    logger.info(f"Пользователь {user.telegram_id} завершил сценарий 'Салат не взошёл', started_at сброшен")

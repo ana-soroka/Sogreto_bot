@@ -1,6 +1,6 @@
 """Handlers package for Sogreto Bot commands"""
 
-from .start import start_command, help_command
+from .start import start_command, help_command, handle_start_callback
 from .user import status_command, pause_command, resume_command, reset_command
 from .content import examples_command, recipes_command, manifesto_command, contact_command
 from .practices import start_practice_command, handle_practice_callback
@@ -17,6 +17,7 @@ __all__ = [
     # Start handlers
     'start_command',
     'help_command',
+    'handle_start_callback',
     # User management
     'status_command',
     'pause_command',
