@@ -320,16 +320,17 @@ async def send_stage4_reminder(bot: Bot, user, db):
 
         # Создать клавиатуру с кнопкой из практики
         buttons_data = first_step.get('buttons', [])
+        keyboard_buttons = []
         if buttons_data:
-            keyboard_buttons = []
             for btn in buttons_data:
                 keyboard_buttons.append([InlineKeyboardButton(btn['text'], callback_data=btn['action'])])
-            keyboard = InlineKeyboardMarkup(keyboard_buttons)
         else:
             # Если кнопок нет в practice, используем стандартную
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Начать практику", callback_data="next_step")]
-            ])
+            keyboard_buttons.append([InlineKeyboardButton("Начать практику", callback_data="next_step")])
+
+        # Добавить кнопку плесени для Stage 4
+        keyboard_buttons.append([InlineKeyboardButton("🍄 Что-то пошло не так / Плесень", callback_data="mold_sprouts_start")])
+        keyboard = InlineKeyboardMarkup(keyboard_buttons)
 
         # Отправить напоминание
         await bot.send_message(
@@ -385,15 +386,17 @@ async def send_stage2_sprouts_reminder(bot: Bot, user, db, day: int):
 
     # Кнопки зависят от дня
     if day == 5:
-        # День 5: две кнопки
+        # День 5: три кнопки (всходы, плесень, не взошёл)
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Всходы появились!", callback_data="sprouts_appeared")],
+            [InlineKeyboardButton("🍄 Что-то пошло не так / Плесень", callback_data="mold_start")],
             [InlineKeyboardButton("😔 Салат не взошёл", callback_data="replant_start")]
         ])
     else:
-        # Дни 2-4: одна кнопка
+        # Дни 2-4: две кнопки (всходы, плесень)
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ У меня появились первые всходы!", callback_data="sprouts_appeared")]
+            [InlineKeyboardButton("✅ У меня появились первые всходы!", callback_data="sprouts_appeared")],
+            [InlineKeyboardButton("🍄 Что-то пошло не так / Плесень", callback_data="mold_start")]
         ])
 
     try:
@@ -510,6 +513,9 @@ async def send_daily_practice_reminder(bot: Bot, user, db):
             if text and action:
                 keyboard_buttons.append([InlineKeyboardButton(text, callback_data=action)])
 
+        # Добавить кнопку плесени для Stage 3
+        keyboard_buttons.append([InlineKeyboardButton("🍄 Что-то пошло не так / Плесень", callback_data="mold_sprouts_start")])
+
         keyboard = InlineKeyboardMarkup(keyboard_buttons) if keyboard_buttons else None
 
         # Отправить короткое напоминание
@@ -565,7 +571,8 @@ async def send_stage5_daily_reminder(bot: Bot, user, db):
         # Кнопка для начала практики
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("Начать практику", callback_data="stage5_start_substep")],
-            [InlineKeyboardButton("Напомнить позже", callback_data="postpone_reminder")]
+            [InlineKeyboardButton("Напомнить позже", callback_data="postpone_reminder")],
+            [InlineKeyboardButton("🍄 Что-то пошло не так / Плесень", callback_data="mold_sprouts_start")]
         ])
 
         # Отправить напоминание

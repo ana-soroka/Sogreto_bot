@@ -130,6 +130,14 @@ class PracticesManager:
         """Получить сценарий 'Салат не взошёл'"""
         return self.data.get('replant_scenario')
 
+    def get_mold_scenario(self) -> Optional[Dict]:
+        """Получить сценарий 'Плесень'"""
+        return self.data.get('mold_scenario')
+
+    def get_mold_sprouts_scenario(self) -> Optional[Dict]:
+        """Получить сценарий 'Плесень' для ростков на воздухе"""
+        return self.data.get('mold_scenario_sprouts')
+
     def get_total_stages(self) -> int:
         """Получить общее количество этапов"""
         stages = self.data.get('practice_structure', {}).get('stages', [])

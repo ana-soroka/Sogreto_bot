@@ -457,6 +457,14 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_replant_step(query, user, db, step_id)
         elif action == "replant_complete":
             await handle_replant_complete(query, user, db)
+        elif action == "mold_start":
+            await handle_mold_start(query, user, db)
+        elif action == "mold_complete":
+            await handle_mold_complete(query, user, db)
+        elif action == "mold_sprouts_start":
+            await handle_mold_sprouts_start(query, user, db)
+        elif action == "mold_sprouts_complete":
+            await handle_mold_sprouts_complete(query, user, db)
         else:
             await query.edit_message_text(
                 f"Действие '{action}' пока не реализовано.\n"
@@ -1538,3 +1546,162 @@ async def handle_replant_complete(query, user, db):
     )
 
     logger.info(f"Пользователь {user.telegram_id} завершил сценарий 'Салат не взошёл', started_at сброшен")
+
+
+# ==================== СЦЕНАРИЙ "ПЛЕСЕНЬ" ====================
+
+async def handle_mold_start(query, user, db):
+    """Показать инструкцию по борьбе с плесенью"""
+    logger.info(f"Пользователь {user.telegram_id} начал сценарий 'Плесень'")
+
+    mold = practices_manager.get_mold_scenario()
+    if not mold:
+        await query.edit_message_text("Ошибка: сценарий не найден")
+        return
+
+    message = f"**{mold.get('title', '')}**\n\n{mold.get('message', '')}"
+    keyboard = create_practice_keyboard(mold.get('buttons', []))
+
+    await query.edit_message_text(message, reply_markup=keyboard, parse_mode='Markdown')
+
+
+async def handle_mold_complete(query, user, db):
+    """Завершить сценарий плесени и вернуть в режим ожидания (БЕЗ сброса таймера)"""
+    logger.info(f"Пользователь {user.telegram_id} завершает сценарий 'Плесень'")
+
+    # НЕ сбрасываем таймер - просто возвращаем в ожидание
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Всходы появились!", callback_data="sprouts_appeared")],
+        [InlineKeyboardButton("🍄 Что-то пошло не так / Плесень", callback_data="mold_start")]
+    ])
+
+    await query.edit_message_text(
+        "🌱 **Отлично!**\n\n"
+        "Ты справился(ась) с плесенью. Продолжай наблюдать за своим горшком.\n\n"
+        "Как только увидишь первые зелёные петельки — нажми кнопку! 🌱",
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
+    logger.info(f"Пользователь {user.telegram_id} завершил сценарий 'Плесень'")
+
+
+async def handle_mold_sprouts_start(query, user, db):
+    """Показать инструкцию по борьбе с плесенью (для ростков на воздухе - Stage 3-5)"""
+    logger.info(f"Пользователь {user.telegram_id} начал сценарий 'Плесень на ростках'")
+
+    mold = practices_manager.get_mold_sprouts_scenario()
+    if not mold:
+        await query.edit_message_text("Ошибка: сценарий не найден")
+        return
+
+    message = f"**{mold.get('title', '')}**\n\n{mold.get('message', '')}"
+    keyboard = create_practice_keyboard(mold.get('buttons', []))
+
+    await query.edit_message_text(message, reply_markup=keyboard, parse_mode='Markdown')
+
+
+async def handle_mold_sprouts_complete(query, user, db):
+    """Завершить сценарий плесени и вернуть к напоминанию текущего этапа (БЕЗ сброса таймера)"""
+    logger.info(f"Пользователь {user.telegram_id} завершает сценарий 'Плесень на ростках'")
+
+    current_stage = user.current_stage
+    current_day = user.daily_practice_day or 1
+
+    # Возвращаем к напоминанию в зависимости от этапа
+    if current_stage == 3:
+        # Stage 3: ежедневные практики
+        stage = practices_manager.get_stage(3)
+        if stage:
+            daily_practices = stage.get('daily_practices', [])
+            practice = None
+            for p in daily_practices:
+                if p.get('day') == current_day:
+                    practice = p
+                    break
+
+            if practice:
+                reminder = practice.get('reminder', {})
+                message = reminder.get('message', '')
+                buttons = reminder.get('buttons', [])
+                keyboard_buttons = []
+                for button in buttons:
+                    text = button.get('text', '')
+                    action = button.get('action', '')
+                    if text and action:
+                        keyboard_buttons.append([InlineKeyboardButton(text, callback_data=action)])
+                keyboard_buttons.append([InlineKeyboardButton("🍄 Что-то пошло не так / Плесень", callback_data="mold_sprouts_start")])
+                keyboard = InlineKeyboardMarkup(keyboard_buttons)
+
+                await query.edit_message_text(
+                    f"🌱 **Отлично!** Ты справился(ась) с плесенью.\n\n{message}",
+                    reply_markup=keyboard,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"Пользователь {user.telegram_id} вернулся к напоминанию Stage 3 день {current_day}")
+                return
+
+    elif current_stage == 4:
+        # Stage 4: якорь
+        stage = practices_manager.get_stage(4)
+        if stage:
+            steps = stage.get('steps', [])
+            if steps:
+                first_step = steps[0]
+                message = f"🌱 **Отлично!** Ты справился(ась) с плесенью.\n\n"
+                message += f"**{first_step.get('title', '')}**\n\n"
+                message += first_step.get('message', '')
+
+                buttons_data = first_step.get('buttons', [])
+                keyboard_buttons = []
+                if buttons_data:
+                    for btn in buttons_data:
+                        keyboard_buttons.append([InlineKeyboardButton(btn['text'], callback_data=btn['action'])])
+                else:
+                    keyboard_buttons.append([InlineKeyboardButton("Начать практику", callback_data="next_step")])
+                keyboard_buttons.append([InlineKeyboardButton("🍄 Что-то пошло не так / Плесень", callback_data="mold_sprouts_start")])
+                keyboard = InlineKeyboardMarkup(keyboard_buttons)
+
+                await query.edit_message_text(message, reply_markup=keyboard, parse_mode='Markdown')
+                logger.info(f"Пользователь {user.telegram_id} вернулся к напоминанию Stage 4")
+                return
+
+    elif current_stage == 5:
+        # Stage 5: ежедневные практики до беби-лифа
+        stage = practices_manager.get_stage(5)
+        if stage:
+            daily_practices = stage.get('daily_practices', [])
+            practice = None
+            for p in daily_practices:
+                if p.get('day') == current_day:
+                    practice = p
+                    break
+
+            if practice:
+                theme = practice.get('theme', '')
+                message = f"🌱 **Отлично!** Ты справился(ась) с плесенью.\n\n"
+                message += f"**День {current_day} из 7: {theme}**\n\n"
+                message += f"Пришло время ежедневной практики с долгосрочными целями.\n\n"
+                message += f"Сегодня мы поработаем с темой «{theme}»."
+
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Начать практику", callback_data="stage5_start_substep")],
+                    [InlineKeyboardButton("Напомнить позже", callback_data="postpone_reminder")],
+                    [InlineKeyboardButton("🍄 Что-то пошло не так / Плесень", callback_data="mold_sprouts_start")]
+                ])
+
+                await query.edit_message_text(message, reply_markup=keyboard, parse_mode='Markdown')
+                logger.info(f"Пользователь {user.telegram_id} вернулся к напоминанию Stage 5 день {current_day}")
+                return
+
+    # Fallback - если не удалось определить этап
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Продолжить практику", callback_data="continue_practice")]
+    ])
+
+    await query.edit_message_text(
+        "🌱 **Отлично!**\n\n"
+        "Ты справился(ась) с плесенью. Возвращайся к практике!",
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
+    logger.info(f"Пользователь {user.telegram_id} завершил сценарий 'Плесень на ростках'")
