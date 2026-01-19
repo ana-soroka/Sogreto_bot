@@ -13,6 +13,10 @@ load_dotenv()
 Base = declarative_base()
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///sogreto_bot.db')
 
+# Railway использует postgres://, но SQLAlchemy требует postgresql://
+if DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+
 # Создание движка БД
 engine = create_engine(
     DATABASE_URL,

@@ -6,6 +6,7 @@ python-dotenv==1.0.0
 apscheduler==3.10.4
 sqlalchemy==2.0.23
 alembic==1.13.1  # Database migrations
+psycopg2-binary==2.9.9  # PostgreSQL driver
 
 # Timezone support
 pytz==2023.3.post1
