@@ -158,7 +158,7 @@ async def _send_substep_message(query, substep):
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("← Назад", callback_data="prev_daily_substep")],
             [InlineKeyboardButton("⏱ Запустить таймер", web_app=WebAppInfo(url=TIMER_WEBAPP_URL))],
-            [InlineKeyboardButton("Минута прошла (без таймера)", callback_data="next_daily_substep")]
+            [InlineKeyboardButton("Минута прошла", callback_data="next_daily_substep")]
         ])
     else:
         logger.info(f"ℹ️ Using standard JSON buttons for substep '{substep_id}'")
