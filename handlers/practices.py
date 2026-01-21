@@ -346,6 +346,56 @@ async def _complete_daily_practice_flow(query, user, db, final_substep):
     logger.info(f"Пользователь {user.telegram_id} завершил практику дня {current_day}")
 
 
+async def handle_prev_daily_substep(query, user, db):
+    """Вернуться к предыдущему подшагу ежедневной практики Stage 3"""
+
+    current_substep = user.daily_practice_substep
+    current_day = user.daily_practice_day
+
+    # Карта переходов НАЗАД
+    substep_back_flow = {
+        "practice": "intro",
+        "checkin": "practice",
+        "response_A": "checkin",
+        "response_B": "checkin",
+    }
+
+    prev_substep = substep_back_flow.get(current_substep)
+
+    if not prev_substep:
+        # Нельзя вернуться назад с intro или неизвестного подшага
+        await query.answer("Это первый подшаг, вернуться назад нельзя.", show_alert=True)
+        return
+
+    # Обновить текущий подшаг
+    user.daily_practice_substep = prev_substep
+    db.commit()
+
+    # Получить данные предыдущего подшага
+    stage = practices_manager.get_stage(3)
+    if not stage:
+        logger.error("Этап 3 не найден в practices.json")
+        await query.edit_message_text("Ошибка: этап не найден")
+        return
+
+    daily_practice = _get_daily_practice_by_day(stage, current_day)
+    if not daily_practice:
+        logger.error(f"Практика дня {current_day} не найдена")
+        await query.edit_message_text(f"Ошибка: практика дня {current_day} не найдена")
+        return
+
+    prev_substep_data = _get_substep_by_id(daily_practice, prev_substep)
+    if not prev_substep_data:
+        logger.error(f"Подшаг '{prev_substep}' не найден для дня {current_day}")
+        await query.answer("Ошибка: подшаг не найден", show_alert=True)
+        return
+
+    # Отправить сообщение предыдущего подшага с кнопками
+    await _send_substep_message(query, prev_substep_data)
+
+    logger.info(f"Пользователь {user.telegram_id} вернулся к подшагу '{prev_substep}' (день {current_day})")
+
+
 @error_handler
 async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -432,6 +482,8 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_start_daily_substep(query, user, db)
         elif action == "next_daily_substep":
             await handle_next_daily_substep(query, user, db, context)
+        elif action == "prev_daily_substep":
+            await handle_prev_daily_substep(query, user, db)
         elif action == "daily_choice_A":
             await handle_daily_choice_A(query, user, db, context)
         elif action == "daily_choice_B":
