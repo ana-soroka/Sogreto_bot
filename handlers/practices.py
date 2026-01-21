@@ -4,7 +4,7 @@
 """
 import logging
 import asyncio
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes
 from utils import error_handler, practices_manager
 from utils.db import get_or_create_user, update_user_progress
@@ -14,6 +14,9 @@ from utils.scheduler import send_daily_practice_reminder
 from handlers.practices_stage5 import handle_stage5_start_substep, handle_stage5_next_substep
 
 logger = logging.getLogger(__name__)
+
+# URL для Web App таймера (с версией для обхода кеша)
+TIMER_WEBAPP_URL = "https://ana-soroka.github.io/Sogreto_bot/webapp/timer.html?v=5"
 
 
 def create_practice_keyboard(buttons_data):
@@ -145,8 +148,19 @@ async def _send_substep_message(query, substep):
     else:
         full_message = message
 
-    buttons = substep.get('buttons', [])
-    keyboard = create_practice_keyboard(buttons) if buttons else None
+    # Special handling for "practice" or "practice2" substeps - add WebApp timer button
+    substep_id = substep.get('substep_id', '')
+    if substep_id in ["practice", "practice2"]:
+        # Create custom keyboard with Back, Timer (WebApp), and Manual buttons
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Назад", callback_data="prev_daily_substep")],
+            [InlineKeyboardButton("⏱ Запустить таймер", web_app=WebAppInfo(url=TIMER_WEBAPP_URL))],
+            [InlineKeyboardButton("Минута прошла (без таймера)", callback_data="next_daily_substep")]
+        ])
+    else:
+        # Use standard JSON button processing for all other substeps
+        buttons = substep.get('buttons', [])
+        keyboard = create_practice_keyboard(buttons) if buttons else None
 
     await query.edit_message_text(
         full_message,
