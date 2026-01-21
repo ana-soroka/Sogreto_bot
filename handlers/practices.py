@@ -150,7 +150,10 @@ async def _send_substep_message(query, substep):
 
     # Special handling for "practice" or "practice2" substeps - add WebApp timer button
     substep_id = substep.get('substep_id', '')
+    logger.info(f"🔍 _send_substep_message: substep_id = '{substep_id}', substep keys = {list(substep.keys())}")
+
     if substep_id in ["practice", "practice2"]:
+        logger.info(f"✅ Creating WebApp timer keyboard for substep '{substep_id}'")
         # Create custom keyboard with Back, Timer (WebApp), and Manual buttons
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("← Назад", callback_data="prev_daily_substep")],
@@ -158,6 +161,7 @@ async def _send_substep_message(query, substep):
             [InlineKeyboardButton("Минута прошла (без таймера)", callback_data="next_daily_substep")]
         ])
     else:
+        logger.info(f"ℹ️ Using standard JSON buttons for substep '{substep_id}'")
         # Use standard JSON button processing for all other substeps
         buttons = substep.get('buttons', [])
         keyboard = create_practice_keyboard(buttons) if buttons else None
