@@ -496,6 +496,8 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_stage5_start_substep(query, user, db)
         elif action == "stage5_next_substep":
             await handle_stage5_next_substep(query, user, db)
+        elif action == "stage5_prev_substep":
+            await handle_stage5_prev_substep(query, user, db)
         elif action == "start_stage6_finale":
             await handle_start_stage6_finale(query, user, db)
         elif action.startswith("stage1_tz_"):

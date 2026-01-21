@@ -154,20 +154,29 @@ async def handle_stage5_next_substep(query, user, db):
 
     # Кнопка
     if next_substep == "timer":
-        # Для таймера показываем две кнопки: Web App и ручное продолжение
+        # Для таймера показываем кнопку "Назад", Web App и ручное продолжение
         keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Назад", callback_data="stage5_prev_substep")],
             [InlineKeyboardButton("⏱ Запустить таймер", web_app=WebAppInfo(url=TIMER_WEBAPP_URL))],
             [InlineKeyboardButton("Продолжить", callback_data="stage5_next_substep")]
         ])
-    else:
-        # Для остальных подшагов обычные кнопки
-        if next_substep == "affirmation":
-            button_text = "Принято. До завтра" if current_day < 7 else "Перейти к празднику зрелости"
-        elif next_substep == "watering":
-            button_text = "Ага"
-
+    elif next_substep == "affirmation":
+        # Для утверждения добавляем кнопку "Назад"
+        button_text = "Принято. До завтра" if current_day < 7 else "Перейти к празднику зрелости"
         keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Назад", callback_data="stage5_prev_substep")],
             [InlineKeyboardButton(button_text, callback_data="stage5_next_substep")]
+        ])
+    elif next_substep == "watering":
+        # Для полива добавляем кнопку "Назад"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Назад", callback_data="stage5_prev_substep")],
+            [InlineKeyboardButton("Ага", callback_data="stage5_next_substep")]
+        ])
+    else:
+        # Для неизвестных подшагов (не должно быть)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Продолжить", callback_data="stage5_next_substep")]
         ])
 
     await query.edit_message_text(message, reply_markup=keyboard, parse_mode='Markdown')
@@ -237,3 +246,81 @@ async def _complete_stage5_day(query, user, db, practice):
     )
 
     logger.info(f"Пользователь {user.telegram_id} завершил день {current_day} (Stage 5)")
+
+
+async def handle_stage5_prev_substep(query, user, db):
+    """Вернуться к предыдущему подшагу ежедневной практики Stage 5"""
+
+    current_substep = user.daily_practice_substep
+    current_day = user.daily_practice_day
+
+    # Карта переходов НАЗАД для Stage 5
+    substep_back_flow = {
+        "timer": "intro",
+        "affirmation": "timer",
+        "watering": "affirmation",
+    }
+
+    prev_substep = substep_back_flow.get(current_substep)
+
+    if not prev_substep:
+        # Нельзя вернуться назад с intro или неизвестного подшага
+        await query.answer("Это первый подшаг, вернуться назад нельзя.", show_alert=True)
+        return
+
+    # Обновить текущий подшаг
+    user.daily_practice_substep = prev_substep
+    db.commit()
+
+    # Получить практику текущего дня
+    practice = _get_stage5_daily_practice(current_day)
+
+    if not practice:
+        logger.error(f"Практика дня {current_day} не найдена для Stage 5")
+        await query.edit_message_text("Ошибка: практика дня не найдена")
+        return
+
+    # Найти предыдущий подшаг
+    prev_step_data = _get_stage5_step_by_type(practice, prev_substep)
+
+    if not prev_step_data:
+        logger.error(f"Подшаг '{prev_substep}' не найден для дня {current_day}")
+        await query.answer("Ошибка: подшаг не найден", show_alert=True)
+        return
+
+    # Построить сообщение с кнопками
+    theme = practice.get('theme', '')
+    message = f"🌱 **День {current_day} из 7: {theme}**\n\n"
+    message += prev_step_data.get('text', '')
+
+    # Создать клавиатуру в зависимости от типа подшага
+    if prev_substep == "intro":
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Продолжить", callback_data="stage5_next_substep")]
+        ])
+    elif prev_substep == "timer":
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Назад", callback_data="stage5_prev_substep")],
+            [InlineKeyboardButton("⏱ Запустить таймер", web_app=WebAppInfo(url=TIMER_WEBAPP_URL))],
+            [InlineKeyboardButton("Продолжить", callback_data="stage5_next_substep")]
+        ])
+    elif prev_substep == "affirmation":
+        button_text = "Принято. До завтра" if current_day < 7 else "Перейти к празднику зрелости"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Назад", callback_data="stage5_prev_substep")],
+            [InlineKeyboardButton(button_text, callback_data="stage5_next_substep")]
+        ])
+    else:
+        # Для других подшагов (не должно быть)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Продолжить", callback_data="stage5_next_substep")]
+        ])
+
+    await query.edit_message_text(
+        message,
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
+    await query.answer()
+
+    logger.info(f"Пользователь {user.telegram_id} вернулся к подшагу '{prev_substep}' (день {current_day}, Stage 5)")
