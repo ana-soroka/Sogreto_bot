@@ -1465,7 +1465,7 @@ async def handle_complete_day4_practice(query, user, db, context):
     """
     await _complete_daily_practice_flow(query, user, db, {
         "message": "Переход к этапу 4..."
-    }, context)
+    })
     logger.info(f"Пользователь {user.telegram_id} завершил день 4, переход к Stage 4")
 
 
