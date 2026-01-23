@@ -14,8 +14,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from sqlalchemy.orm import Session
 
-from utils.db import SessionLocal, get_or_create_user
-from models import User
+from models import SessionLocal, User
+from utils.db import get_or_create_user
 from handlers.decorators import error_handler
 
 logger = logging.getLogger(__name__)
