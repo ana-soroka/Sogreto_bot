@@ -45,6 +45,11 @@ from handlers import (
 )
 from handlers.admin import admin_test_command
 from handlers.admin_test import handle_admin_test_callback
+from handlers.admin_fast_test import (
+    test_wait_scheduler_command,
+    test_status_command,
+    test_reset_command
+)
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -154,6 +159,11 @@ def main():
     # Админские команды
     application.add_handler(CommandHandler("reload_practices", reload_practices_command))
     application.add_handler(CommandHandler("admin_test", admin_test_command))
+
+    # Тестовые команды для проверки автоматической работы scheduler (только для админов)
+    application.add_handler(CommandHandler("test_wait_scheduler", test_wait_scheduler_command))
+    application.add_handler(CommandHandler("test_status", test_status_command))
+    application.add_handler(CommandHandler("test_reset", test_reset_command))
 
     # Обработчик нажатий на кнопки (callback_query)
     # Используем паттерны для разных типов кнопок
