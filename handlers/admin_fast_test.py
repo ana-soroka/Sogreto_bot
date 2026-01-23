@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from models import SessionLocal, User
 from utils.db import get_or_create_user
-from handlers.decorators import error_handler
+from utils import error_handler
 
 logger = logging.getLogger(__name__)
 
