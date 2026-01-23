@@ -211,6 +211,7 @@ async def test_wait_scheduler_command(update: Update, context: ContextTypes.DEFA
 
 
 @error_handler
+@error_handler
 async def test_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Показать текущее состояние тестирования
