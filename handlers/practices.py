@@ -1205,7 +1205,7 @@ async def handle_confirm_reset(query, user, db):
     db.commit()
 
     # Сформировать сообщение первого шага
-    message = f"�� **Прогресс сброшен!**\n\n"
+    message = f"🔄 **Прогресс сброшен!**\n\n"
     message += f"Начнём сначала! 🌱\n\n"
     message += f"**{first_step.get('title', 'Практика')}**\n\n"
     message += first_step.get('message', '')
