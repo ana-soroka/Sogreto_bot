@@ -121,6 +121,9 @@ async def timezone_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🇷🇺 Москва (UTC+3)", callback_data="tz_Europe/Moscow"),
         ],
         [
+            InlineKeyboardButton("🇷🇺 Самара (UTC+4)", callback_data="tz_Europe/Samara"),
+        ],
+        [
             InlineKeyboardButton("🇷🇺 Екатеринбург (UTC+5)", callback_data="tz_Asia/Yekaterinburg"),
         ],
         [
@@ -131,9 +134,6 @@ async def timezone_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ],
         [
             InlineKeyboardButton("🇰🇿 Алматы (UTC+6)", callback_data="tz_Asia/Almaty"),
-        ],
-        [
-            InlineKeyboardButton("🇧🇾 Минск (UTC+3)", callback_data="tz_Europe/Minsk"),
         ],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
