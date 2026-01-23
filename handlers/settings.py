@@ -92,6 +92,11 @@ async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
             # Сохранить время в БД
             user.preferred_time = time_str
+
+            # Установить last_reminder_sent чтобы предотвратить отправку в тот же день
+            from datetime import datetime
+            user.last_reminder_sent = datetime.utcnow()
+
             db.commit()
 
             await query.edit_message_text(

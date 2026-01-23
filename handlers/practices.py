@@ -801,6 +801,11 @@ async def handle_stage1_time(query, user, db, action):
 
     # Сохранить время в БД
     user.preferred_time = time_str
+
+    # Установить last_reminder_sent чтобы предотвратить отправку в тот же день
+    from datetime import datetime
+    user.last_reminder_sent = datetime.utcnow()
+
     db.commit()
 
     logger.info(f"Пользователь {user.telegram_id} выбрал время напоминаний: {time_str}")

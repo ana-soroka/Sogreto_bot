@@ -372,7 +372,7 @@ async def send_stage2_sprouts_reminder(bot: Bot, user, db, day: int):
             "🌾 **Проверка всходов**\n\n"
             "4-й день после посадки. Если ростки ещё не показались - проверьте:\n"
             "• Достаточно ли влаги в почве?\n"
-            "• Накрыт ли горшок плёнкой?\n"
+            "• Накрыт ли горшок крышкой?\n"
             "• Стоит ли в тёплом месте?"
         ),
         5: (
@@ -601,11 +601,10 @@ async def check_and_send_reminders(bot: Bot):
         # Получить текущее время в UTC
         now_utc = datetime.utcnow()
 
-        # Найти всех активных пользователей с установленным временем напоминаний
+        # Найти всех активных пользователей, которые начали практики
         users = db.query(User).filter(
             User.is_active == True,
             User.is_paused == False,
-            User.preferred_time.isnot(None),
             User.started_at.isnot(None)
         ).all()
 
@@ -621,12 +620,36 @@ async def check_and_send_reminders(bot: Bot):
                 current_hour = now_user_tz.hour
                 current_minute = now_user_tz.minute
 
-                # Парсить preferred_time (формат "HH:MM")
-                if user.preferred_time:
-                    hour, minute = map(int, user.preferred_time.split(':'))
+                # Определить время напоминания: preferred_time или fallback (09:00)
+                reminder_time = user.preferred_time or user.reminder_time or "09:00"
+                hour, minute = map(int, reminder_time.split(':'))
 
-                    # Если текущее время совпадает с preferred_time (с точностью до часа)
-                    if current_hour == hour and 0 <= current_minute < 30:
+                # Если текущее время совпадает с временем напоминания (с точностью до часа)
+                if current_hour == hour and 0 <= current_minute < 30:
+                        # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ STAGE 2: Напоминания о всходах (дни 2-5)
+                        if user.current_stage == 1 and user.awaiting_sprouts:
+                            # Вычислить день с момента посадки
+                            days_since_start = (now_user_tz.date() - user.started_at.replace(tzinfo=pytz.utc).astimezone(user_tz).date()).days
+
+                            # Отправлять напоминания на дни 2, 3, 4, 5
+                            if 2 <= days_since_start <= 5:
+                                # Проверить, не отправляли ли уже сегодня
+                                if user.last_reminder_sent:
+                                    last_reminder_user_tz = user.last_reminder_sent.replace(tzinfo=pytz.utc).astimezone(user_tz)
+                                    if last_reminder_user_tz.date() == now_user_tz.date():
+                                        logger.debug(f"Напоминание о всходах для пользователя {user.telegram_id} уже отправлено сегодня")
+                                        continue
+
+                                # Отправить напоминание о всходах
+                                await send_stage2_sprouts_reminder(bot, user, db, day=days_since_start)
+
+                                # Обновить время последнего напоминания
+                                user.last_reminder_sent = now_utc
+                                db.commit()
+
+                                logger.info(f"Отправлено напоминание о всходах (день {days_since_start}) пользователю {user.telegram_id}")
+                                continue
+
                         # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЕЖЕДНЕВНЫХ ПРАКТИК ЭТАПА 3
                         if user.current_stage == 3 and user.daily_practice_day == 0:
                             # Пользователь в режиме ожидания, нужно начать первую практику
