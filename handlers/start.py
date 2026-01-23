@@ -81,9 +81,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/set_time - Установить время напоминаний\n"
         "/timezone - Установить часовой пояс\n\n"
         "**Дополнительно:**\n"
-        "/examples - Примеры желаний\n"
-        "/recipes - Рецепты с микрозеленью\n"
-        "/manifesto - Манифест предвкушения\n"
         "/contact - Связаться с поддержкой\n\n"
         "**О практиках:**\n"
         "Практики длятся 14-20 дней и разделены на 6 этапов:\n"
@@ -96,7 +93,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Вопросы? Пиши /contact 💚"
     )
 
-    await update.message.reply_text(help_text)
+    await update.message.reply_text(help_text, parse_mode='Markdown')
 
 
 @error_handler
