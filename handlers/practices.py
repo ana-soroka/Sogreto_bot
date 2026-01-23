@@ -665,7 +665,6 @@ async def handle_complete_stage(query, user, db):
             [InlineKeyboardButton("🇷🇺 Екатеринбург (UTC+5)", callback_data="stage1_tz_Asia/Yekaterinburg")],
             [InlineKeyboardButton("🇷🇺 Новосибирск (UTC+7)", callback_data="stage1_tz_Asia/Novosibirsk")],
             [InlineKeyboardButton("🇷🇺 Владивосток (UTC+10)", callback_data="stage1_tz_Asia/Vladivostok")],
-            [InlineKeyboardButton("🇰🇿 Алматы (UTC+6)", callback_data="stage1_tz_Asia/Almaty")],
         ]
 
         await query.edit_message_text(

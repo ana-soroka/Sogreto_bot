@@ -132,9 +132,6 @@ async def timezone_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton("🇷🇺 Владивосток (UTC+10)", callback_data="tz_Asia/Vladivostok"),
         ],
-        [
-            InlineKeyboardButton("🇰🇿 Алматы (UTC+6)", callback_data="tz_Asia/Almaty"),
-        ],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
