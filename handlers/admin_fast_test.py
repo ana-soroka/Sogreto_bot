@@ -423,22 +423,22 @@ async def admin_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         users = rows
 
-        lines = [f"👥 **Все пользователи ({len(users)}):**\n"]
+        lines = [f"Все пользователи ({len(users)}):\n"]
         for row in users:
             tid, uname, fname, stage = row
-            username = f"@{uname}" if uname else "(нет username)"
+            username = f"@{uname}" if uname else "(нет)"
             name = fname or "(нет имени)"
             stage_str = stage or "-"
-            lines.append(f"• `{tid}` — {name} {username} | Stage {stage_str}")
+            lines.append(f"{tid} | {name} | {username} | Stage {stage_str}")
 
         text = "\n".join(lines)
 
         if len(text) > 4000:
             for i in range(0, len(lines), 30):
                 chunk = "\n".join(lines[i:i+30])
-                await update.message.reply_text(chunk, parse_mode='Markdown')
+                await update.message.reply_text(chunk)
         else:
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(text)
 
     except Exception as e:
         logger.error(f"Ошибка в /admin_users: {e}")
