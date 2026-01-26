@@ -384,7 +384,7 @@ async def admin_check_user_command(update: Update, context: ContextTypes.DEFAULT
             f"• Preferred time: {db_user.preferred_time or '(не установлено)'}"
         )
 
-        await update.message.reply_text(status_text, parse_mode='Markdown')
+        await update.message.reply_text(status_text)
 
     finally:
         db.close()

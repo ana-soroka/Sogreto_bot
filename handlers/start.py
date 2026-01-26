@@ -104,8 +104,6 @@ async def handle_start_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     if query.data == "start_show_status":
         # Показать статус пользователя
-        from handlers.status import status_command
-        # Создаём фейковый update с message для status_command
         await query.message.reply_text("📊 Загружаю твой прогресс...")
         # Вызываем status напрямую
         from models import User
