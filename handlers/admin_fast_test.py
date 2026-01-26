@@ -404,10 +404,10 @@ async def admin_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     db = SessionLocal()
     try:
-        users = db.query(User).order_by(User.created_at.desc()).all()
+        users = db.query(User).all()
 
         if not users:
-            await update.message.reply_text("Пользователей пока нет.")
+            await update.message.reply_text("Пользователей пока нет (0 записей в БД).")
             return
 
         lines = [f"👥 **Все пользователи ({len(users)}):**\n"]
@@ -430,6 +430,10 @@ async def admin_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await update.message.reply_text(chunk, parse_mode='Markdown')
         else:
             await update.message.reply_text(text, parse_mode='Markdown')
+
+    except Exception as e:
+        logger.error(f"Ошибка в /admin_users: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {e}")
 
     finally:
         db.close()
