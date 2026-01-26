@@ -404,23 +404,24 @@ async def admin_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     db = SessionLocal()
     try:
-        users = db.query(User).all()
+        # Отладка: проверяем подключение к БД
+        from sqlalchemy import text
+        result = db.execute(text("SELECT telegram_id, username, first_name, current_stage FROM users"))
+        rows = result.fetchall()
 
-        if not users:
-            await update.message.reply_text("Пользователей пока нет (0 записей в БД).")
+        if not rows:
+            await update.message.reply_text("Пользователей пока нет (0 записей в таблице users).")
             return
 
+        users = rows
+
         lines = [f"👥 **Все пользователи ({len(users)}):**\n"]
-        for u in users:
-            username = f"@{u.username}" if u.username else "(нет username)"
-            name = u.first_name or "(нет имени)"
-            stage = u.current_stage or "-"
-            status = ""
-            if u.is_paused:
-                status = " ⏸"
-            elif not u.is_active:
-                status = " ❌"
-            lines.append(f"• `{u.telegram_id}` — {name} {username} | Stage {stage}{status}")
+        for row in users:
+            tid, uname, fname, stage = row
+            username = f"@{uname}" if uname else "(нет username)"
+            name = fname or "(нет имени)"
+            stage_str = stage or "-"
+            lines.append(f"• `{tid}` — {name} {username} | Stage {stage_str}")
 
         text = "\n".join(lines)
 
