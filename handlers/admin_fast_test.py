@@ -410,7 +410,15 @@ async def admin_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         rows = result.fetchall()
 
         if not rows:
-            await update.message.reply_text("Пользователей пока нет (0 записей в таблице users).")
+            import os
+            db_url = os.getenv('DATABASE_URL', 'НЕ ЗАДАН (используется sqlite)')
+            # Скрыть пароль если есть
+            if '@' in db_url:
+                db_url = db_url.split('@')[1]
+            await update.message.reply_text(
+                f"0 записей в таблице users.\n\n"
+                f"БД: {db_url}"
+            )
             return
 
         users = rows
