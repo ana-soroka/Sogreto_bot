@@ -388,3 +388,48 @@ async def admin_check_user_command(update: Update, context: ContextTypes.DEFAULT
 
     finally:
         db.close()
+
+
+@error_handler
+async def admin_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Показать список всех пользователей бота
+    Использование: /admin_users
+    """
+    user = update.effective_user
+
+    if not is_admin(user.id):
+        await update.message.reply_text("⛔ Недостаточно прав")
+        return
+
+    db = SessionLocal()
+    try:
+        users = db.query(User).order_by(User.created_at.desc()).all()
+
+        if not users:
+            await update.message.reply_text("Пользователей пока нет.")
+            return
+
+        lines = [f"👥 **Все пользователи ({len(users)}):**\n"]
+        for u in users:
+            username = f"@{u.username}" if u.username else "(нет username)"
+            name = u.first_name or "(нет имени)"
+            stage = u.current_stage or "-"
+            status = ""
+            if u.is_paused:
+                status = " ⏸"
+            elif not u.is_active:
+                status = " ❌"
+            lines.append(f"• `{u.telegram_id}` — {name} {username} | Stage {stage}{status}")
+
+        text = "\n".join(lines)
+
+        if len(text) > 4000:
+            for i in range(0, len(lines), 30):
+                chunk = "\n".join(lines[i:i+30])
+                await update.message.reply_text(chunk, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(text, parse_mode='Markdown')
+
+    finally:
+        db.close()

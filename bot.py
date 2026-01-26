@@ -49,7 +49,8 @@ from handlers.admin_fast_test import (
     test_wait_scheduler_command,
     test_status_command,
     test_reset_command,
-    admin_check_user_command
+    admin_check_user_command,
+    admin_users_command
 )
 
 # Загрузка переменных окружения
@@ -166,6 +167,7 @@ def main():
     application.add_handler(CommandHandler("test_status", test_status_command))
     application.add_handler(CommandHandler("test_reset", test_reset_command))
     application.add_handler(CommandHandler("admin_check_user", admin_check_user_command))
+    application.add_handler(CommandHandler("admin_users", admin_users_command))
 
     # Обработчик нажатий на кнопки (callback_query)
     # Используем паттерны для разных типов кнопок
