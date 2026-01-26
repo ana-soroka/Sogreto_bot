@@ -315,3 +315,76 @@ async def test_reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     finally:
         db.close()
+
+
+@error_handler
+async def admin_check_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Проверить состояние любого пользователя по telegram_id
+    Использование: /admin_check_user <telegram_id>
+    """
+    user = update.effective_user
+
+    # Проверка прав администратора
+    if not is_admin(user.id):
+        await update.message.reply_text("⛔ Недостаточно прав")
+        return
+
+    if not context.args or len(context.args) < 1:
+        await update.message.reply_text(
+            "❌ Укажите telegram_id пользователя!\n\n"
+            "Использование: /admin_check_user <telegram_id>\n"
+            "Пример: /admin_check_user 123456789"
+        )
+        return
+
+    try:
+        target_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("❌ telegram_id должен быть числом")
+        return
+
+    db = SessionLocal()
+    try:
+        db_user = db.query(User).filter(User.telegram_id == target_id).first()
+        if not db_user:
+            await update.message.reply_text(f"❌ Пользователь {target_id} не найден в базе данных")
+            return
+
+        # Рассчитать день
+        days_since = 0
+        if db_user.started_at:
+            days_since = (datetime.utcnow() - db_user.started_at).days
+
+        status_text = (
+            f"📊 **Состояние пользователя {target_id}**\n\n"
+            f"**Пользователь:**\n"
+            f"• Username: @{db_user.username or '(нет)'}\n"
+            f"• Имя: {db_user.first_name or '(нет)'}\n\n"
+            f"**Время:**\n"
+            f"• Started at: {db_user.started_at}\n"
+            f"• Дней с начала: {days_since}\n"
+            f"• Last reminder: {db_user.last_reminder_sent}\n\n"
+            f"**Состояние:**\n"
+            f"• Stage: {db_user.current_stage}\n"
+            f"• Step: {db_user.current_step}\n"
+            f"• Current day: {db_user.current_day}\n"
+            f"• Daily practice day: {db_user.daily_practice_day}\n"
+            f"• Daily substep: {db_user.daily_practice_substep or '(нет)'}\n"
+            f"• Last practice date: {db_user.last_practice_date or '(нет)'}\n\n"
+            f"**Флаги:**\n"
+            f"• awaiting_sprouts: {db_user.awaiting_sprouts}\n"
+            f"• is_active: {db_user.is_active}\n"
+            f"• is_paused: {db_user.is_paused}\n"
+            f"• reminder_postponed: {db_user.reminder_postponed}\n"
+            f"• Stage 4 reminder: {db_user.stage4_reminder_date or '(нет)'}\n"
+            f"• Stage 6 reminder: {db_user.stage6_reminder_date or '(нет)'}\n\n"
+            f"**Настройки:**\n"
+            f"• Timezone: {db_user.timezone}\n"
+            f"• Preferred time: {db_user.preferred_time or '(не установлено)'}"
+        )
+
+        await update.message.reply_text(status_text, parse_mode='Markdown')
+
+    finally:
+        db.close()

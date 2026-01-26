@@ -682,6 +682,10 @@ async def handle_complete_stage(query, user, db):
         # Перейти на этап 3, шаг 0 (переходное сообщение)
         update_user_progress(db, user.telegram_id, stage_id=3, step_id=0, day=user.current_day)
 
+        # Defensive: сбросить awaiting_sprouts при переходе на Stage 3
+        user.awaiting_sprouts = False
+        db.commit()
+
         # Получить переходное сообщение (step_id=0) из этапа 3
         stage = practices_manager.get_stage(3)
         if stage:
@@ -832,45 +836,47 @@ async def handle_stage1_time(query, user, db, action):
 
 
 async def handle_sprouts_appeared(query, user, db):
-    """Обработать нажатие кнопки 'Появились первые всходы'"""
-    # Сбросить флаг ожидания всходов
-    user.awaiting_sprouts = False
-
-    # Перейти на этап 2
-    update_user_progress(db, user.telegram_id, stage_id=2, step_id=1, day=user.current_day)
-
-    # Получить первый шаг этапа 2
-    stage = practices_manager.get_stage(2)
-    if not stage:
-        await query.edit_message_text("Ошибка: этап 2 не найден")
+    """Обработать нажатие кнопки 'У меня появились первые всходы!'"""
+    # Проверить, что пользователь на Этапе 1
+    if user.current_stage != 1:
+        await query.edit_message_text(
+            "Эта функция доступна только на Этапе 1 (после посадки).\n\n"
+            "Используйте /status для проверки вашего прогресса."
+        )
         return
 
-    steps = stage.get('steps', [])
-    first_step = None
-    for step in steps:
-        if step.get('step_id') == 1:
-            first_step = step
-            break
+    # Сбросить флаг ожидания всходов
+    user.awaiting_sprouts = False
+    db.commit()
 
-    if first_step:
-        # Сформировать сообщение
-        message = f"**{first_step.get('title', 'Практика')}**\n\n"
-        message += first_step.get('message', '')
+    # Перевести пользователя на Этап 2, Шаг 7 (первый шаг этапа, день 2)
+    update_user_progress(db, user.telegram_id, stage_id=2, step_id=7, day=2)
 
-        # Создать клавиатуру
-        buttons = first_step.get('buttons', [])
-        keyboard = create_practice_keyboard(buttons)
+    # Получить первый шаг Этапа 2
+    stage2 = practices_manager.get_stage(2)
+    if not stage2:
+        await query.edit_message_text("Ошибка: не найден Этап 2")
+        return
 
-        # Отправить первый шаг
-        await query.edit_message_text(
-            message,
-            reply_markup=keyboard,
-            parse_mode='Markdown'
-        )
+    first_step = stage2['steps'][0]
 
-        logger.info(f"Пользователь {user.telegram_id} сообщил о всходах, переход на этап 2")
-    else:
-        await query.edit_message_text("Ошибка: первый шаг этапа 2 не найден")
+    # Сформировать сообщение
+    message = "🎉 **Отлично! Ваши всходы появились!**\n\n"
+    message += f"**{first_step.get('title', '')}**\n\n"
+    message += first_step.get('message', '')
+
+    # Создать клавиатуру с кнопками
+    buttons = first_step.get('buttons', [])
+    keyboard = create_practice_keyboard(buttons)
+
+    # Отправить новый этап
+    await query.edit_message_text(
+        message,
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
+
+    logger.info(f"Пользователь {user.telegram_id} подтвердил всходы, переведён на Этап 2")
 
 
 async def handle_show_examples(query, user, db, opened_categories=None):
@@ -1082,46 +1088,6 @@ async def handle_start_daily_practices(query, user, db):
         "🌱 Первое напоминание придет завтра в твоё предпочтительное время!",
         parse_mode='Markdown'
     )
-
-
-async def handle_sprouts_appeared(query, user, db):
-    """Обработать нажатие кнопки 'У меня появились первые всходы!'"""
-    # Проверить, что пользователь на Этапе 1
-    if user.current_stage != 1:
-        await query.edit_message_text(
-            "Эта функция доступна только на Этапе 1 (после посадки).\n\n"
-            "Используйте /status для проверки вашего прогресса."
-        )
-        return
-
-    # Перевести пользователя на Этап 2, Шаг 7 (первый шаг этапа, день 2)
-    update_user_progress(db, user.telegram_id, stage_id=2, step_id=7, day=2)
-
-    # Получить первый шаг Этапа 2
-    stage2 = practices_manager.get_stage(2)
-    if not stage2:
-        await query.edit_message_text("Ошибка: не найден Этап 2")
-        return
-
-    first_step = stage2['steps'][0]
-
-    # Сформировать сообщение
-    message = "🎉 **Отлично! Ваши всходы появились!**\n\n"
-    message += f"**{first_step.get('title', '')}**\n\n"
-    message += first_step.get('message', '')
-
-    # Создать клавиатуру с кнопками
-    buttons = first_step.get('buttons', [])
-    keyboard = create_practice_keyboard(buttons)
-
-    # Отправить новый этап
-    await query.edit_message_text(
-        message,
-        reply_markup=keyboard,
-        parse_mode='Markdown'
-    )
-
-    logger.info(f"Пользователь {user.telegram_id} подтвердил всходы, переведён на Этап 2")
 
 
 async def handle_continue_practice(query, user, db):
