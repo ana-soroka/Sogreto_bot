@@ -54,19 +54,29 @@ async def simulate_day_fast(db: Session, user: User, target_day: int) -> dict:
         user.awaiting_sprouts = False
         state_info = {"stage": 1, "action": "Посадка"}
 
-    elif 2 <= target_day <= 5:
-        # Дни 2-5: Всходы (Stage 2)
+    elif target_day == 2:
+        # День 2: Ожидание всходов (Stage 1, step 6)
         user.current_stage = 1
         user.current_step = 6
         user.awaiting_sprouts = True
-        state_info = {"stage": 2, "action": f"Всходы день {target_day}"}
+        state_info = {"stage": 1, "action": "Ожидание всходов"}
+
+    elif target_day == 3:
+        # День 3: Stage 2 завершён, готов к переходу на Stage 3
+        user.current_stage = 3
+        user.current_step = 0
+        user.awaiting_sprouts = False
+        user.daily_practice_day = 0
+        user.last_practice_date = None
+        state_info = {"stage": 3, "action": "Только перешёл на Stage 3 (ждёт первое уведомление)"}
 
     elif 4 <= target_day <= 6:
-        # Stage 3: Ежедневные практики (дни 1-4)
+        # Дни 4-6: Stage 3 ежедневные практики
         user.current_stage = 3
         user.awaiting_sprouts = False
         practice_day = target_day - 3  # День 4 = practice_day 1
-        user.daily_practice_day = max(0, min(practice_day, 4))
+        user.daily_practice_day = max(1, min(practice_day, 4))
+        user.last_practice_date = None
         state_info = {"stage": 3, "practice_day": user.daily_practice_day}
 
     elif target_day == 7:

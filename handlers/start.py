@@ -52,12 +52,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_stage > 1 or user_step > 1:
         # Пользователь уже проходил практики
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Да, тык 🌱", callback_data="start_show_status")]
+            [InlineKeyboardButton("Давай начнем 🌱", callback_data="start_show_status")]
         ])
     else:
         # Новый пользователь - начать практики
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Да, тык 🌱", callback_data="start_practice_from_start")]
+            [InlineKeyboardButton("Давай начнем 🌱", callback_data="start_practice_from_start")]
         ])
 
     await update.message.reply_text(welcome_message, reply_markup=keyboard)
