@@ -684,6 +684,9 @@ async def handle_complete_stage(query, user, db):
 
         # Defensive: сбросить awaiting_sprouts при переходе на Stage 3
         user.awaiting_sprouts = False
+        # Установить last_reminder_sent чтобы Stage 3 уведомление пришло ЗАВТРА, а не сегодня
+        from datetime import datetime as dt_cls
+        user.last_reminder_sent = dt_cls.utcnow()
         db.commit()
 
         # Получить переходное сообщение (step_id=0) из этапа 3

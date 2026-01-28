@@ -652,6 +652,14 @@ async def check_and_send_reminders(bot: Bot):
 
                         # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЕЖЕДНЕВНЫХ ПРАКТИК ЭТАПА 3
                         if user.current_stage == 3 and user.daily_practice_day == 0:
+                            # Проверить, не отправляли ли напоминание сегодня
+                            # (чтобы Stage 3 уведомление пришло на СЛЕДУЮЩИЙ день после завершения Stage 2)
+                            if user.last_reminder_sent:
+                                last_reminder_user_tz = user.last_reminder_sent.replace(tzinfo=pytz.utc).astimezone(user_tz)
+                                if last_reminder_user_tz.date() == now_user_tz.date():
+                                    logger.debug(f"Пользователь {user.telegram_id} перешёл на Stage 3 сегодня, ждём завтра")
+                                    continue
+
                             # Пользователь в режиме ожидания, нужно начать первую практику
                             user.daily_practice_day = 1
                             db.commit()
