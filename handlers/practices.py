@@ -712,10 +712,6 @@ async def handle_complete_stage(query, user, db):
                     if text and action:
                         keyboard_buttons.append([InlineKeyboardButton(text, callback_data=action)])
 
-                # Добавить админскую кнопку если пользователь - админ
-                if is_admin(user.telegram_id):
-                    keyboard_buttons.append([InlineKeyboardButton("🧪 Тест-напоминание", callback_data="test_daily_reminder")])
-
                 keyboard = InlineKeyboardMarkup(keyboard_buttons)
 
                 await query.edit_message_text(
