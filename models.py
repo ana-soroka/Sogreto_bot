@@ -2,7 +2,7 @@
 Модели базы данных для Sogreto Bot
 """
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, DateTime, Boolean, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -33,7 +33,7 @@ class User(Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(Integer, unique=True, nullable=False, index=True)
+    telegram_id = Column(BigInteger, unique=True, nullable=False, index=True)
     username = Column(String(255), nullable=True)
     first_name = Column(String(255), nullable=True)
     last_name = Column(String(255), nullable=True)
@@ -84,7 +84,7 @@ class UserProgress(Base):
     __tablename__ = 'user_progress'
 
     id = Column(Integer, primary_key=True, index=True)
-    user_telegram_id = Column(Integer, nullable=False, index=True)
+    user_telegram_id = Column(BigInteger, nullable=False, index=True)
 
     # Какой этап/шаг пройден
     stage_id = Column(Integer, nullable=False)
@@ -106,7 +106,7 @@ class ScheduledReminder(Base):
     __tablename__ = 'scheduled_reminders'
 
     id = Column(Integer, primary_key=True, index=True)
-    user_telegram_id = Column(Integer, nullable=False, index=True)
+    user_telegram_id = Column(BigInteger, nullable=False, index=True)
 
     # Тип напоминания
     reminder_type = Column(String(50), nullable=False)  # 'daily', 'next_practice', 'custom'
@@ -130,6 +130,28 @@ class ScheduledReminder(Base):
 def init_db():
     """Инициализация базы данных - создание всех таблиц"""
     Base.metadata.create_all(bind=engine)
+
+    # Миграция: изменить INTEGER на BIGINT для telegram_id (для новых Telegram ID > 2^31)
+    if not DATABASE_URL.startswith('sqlite'):
+        try:
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                # Проверить текущий тип колонки
+                result = conn.execute(text(
+                    "SELECT data_type FROM information_schema.columns "
+                    "WHERE table_name = 'users' AND column_name = 'telegram_id'"
+                ))
+                row = result.fetchone()
+                if row and row[0] == 'integer':
+                    print("Миграция: telegram_id INTEGER -> BIGINT...")
+                    conn.execute(text("ALTER TABLE users ALTER COLUMN telegram_id TYPE BIGINT"))
+                    conn.execute(text("ALTER TABLE user_progress ALTER COLUMN user_telegram_id TYPE BIGINT"))
+                    conn.execute(text("ALTER TABLE scheduled_reminders ALTER COLUMN user_telegram_id TYPE BIGINT"))
+                    conn.commit()
+                    print("OK: Миграция telegram_id завершена")
+        except Exception as e:
+            print(f"Предупреждение при миграции: {e}")
+
     print("OK: База данных инициализирована")
 
 
