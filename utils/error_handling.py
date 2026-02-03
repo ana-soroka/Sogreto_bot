@@ -21,6 +21,9 @@ from telegram.ext import ContextTypes
 # Настройка логгера
 logger = logging.getLogger(__name__)
 
+# ID администратора для уведомлений об ошибках
+ADMIN_ID = 1585940117
+
 
 class BotError(Exception):
     """Базовый класс для ошибок бота"""
@@ -117,11 +120,18 @@ def error_handler(func):
                 await update.effective_message.reply_text(
                     "Ошибка базы данных. Администраторы уже уведомлены."
                 )
-            # TODO: Отправить алерт админу
-            # await send_admin_alert(f"DB Error: {e}")
+            # Отправить алерт админу
+            if update.effective_user and context.bot:
+                user_info = {
+                    'id': update.effective_user.id,
+                    'username': update.effective_user.username,
+                    'first_name': update.effective_user.first_name
+                }
+                await send_admin_alert(context.bot, user_info, str(e), func.__name__)
 
         except Exception as e:
             # Неожиданная ошибка
+            error_text = f"{type(e).__name__}: {e}"
             logger.critical(
                 f"Unexpected error in {func.__name__}: {e}\n"
                 f"Traceback: {traceback.format_exc()}"
@@ -130,8 +140,14 @@ def error_handler(func):
                 await update.effective_message.reply_text(
                     "Произошла непредвиденная ошибка. Администраторы уже уведомлены."
                 )
-            # TODO: Отправить алерт админу
-            # await send_admin_alert(f"Critical Error in {func.__name__}: {e}")
+            # Отправить алерт админу
+            if update.effective_user and context.bot:
+                user_info = {
+                    'id': update.effective_user.id,
+                    'username': update.effective_user.username,
+                    'first_name': update.effective_user.first_name
+                }
+                await send_admin_alert(context.bot, user_info, error_text, func.__name__)
 
     return wrapper
 
@@ -157,6 +173,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
     Регистрация:
         application.add_error_handler(global_error_handler)
     """
+    error_text = f"{type(context.error).__name__}: {context.error}"
     logger.error(f"Exception while handling an update: {context.error}")
 
     # Логируем traceback
@@ -164,8 +181,14 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
     tb_string = ''.join(tb_list)
     logger.error(f"Traceback:\n{tb_string}")
 
-    # TODO: Отправить админу детальную информацию
-    # await send_admin_alert(f"Global error: {context.error}\n{tb_string[:500]}")
+    # Отправить админу детальную информацию
+    if isinstance(update, Update) and update.effective_user and context.bot:
+        user_info = {
+            'id': update.effective_user.id,
+            'username': update.effective_user.username,
+            'first_name': update.effective_user.first_name
+        }
+        await send_admin_alert(context.bot, user_info, error_text, "global_error_handler")
 
     # Если это Update с сообщением, отправляем пользователю
     if isinstance(update, Update) and update.effective_message:
@@ -201,23 +224,42 @@ def validate_user_input(text: str, max_length: int = 1000) -> bool:
     return True
 
 
-async def send_admin_alert(message: str, admin_id: int = None):
+async def send_admin_alert(bot, user_info: dict, error_info: str, handler_name: str = None):
     """
-    Отправить алерт администратору
+    Отправить алерт администратору об ошибке
 
     Args:
-        message: Текст алерта
-        admin_id: ID администратора в Telegram (из конфига)
-
-    TODO: Реализовать после настройки бота
+        bot: Telegram Bot instance
+        user_info: Информация о пользователе (id, username, first_name)
+        error_info: Описание ошибки
+        handler_name: Название функции где произошла ошибка
     """
-    # from bot import application
-    # if admin_id:
-    #     await application.bot.send_message(
-    #         chat_id=admin_id,
-    #         text=f"🚨 ALERT:\n{message}"
-    #     )
-    pass
+    try:
+        user_id = user_info.get('id', 'N/A')
+        username = user_info.get('username')
+        first_name = user_info.get('first_name', 'N/A')
+
+        # Формируем ссылку на пользователя
+        if username:
+            user_link = f"@{username}"
+        else:
+            user_link = f"tg://user?id={user_id}"
+
+        message = (
+            f"🚨 ОШИБКА В БОТЕ\n\n"
+            f"👤 Пользователь:\n"
+            f"  • ID: {user_id}\n"
+            f"  • Имя: {first_name}\n"
+            f"  • Связаться: {user_link}\n\n"
+            f"📍 Где: {handler_name or 'неизвестно'}\n\n"
+            f"❌ Ошибка:\n{error_info[:1000]}"
+        )
+
+        await bot.send_message(chat_id=ADMIN_ID, text=message)
+        logger.info(f"Admin alert sent about error for user {user_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to send admin alert: {e}")
 
 
 # Пример использования:
