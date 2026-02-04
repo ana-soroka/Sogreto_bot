@@ -11,7 +11,7 @@ from utils.db import get_or_create_user, update_user_progress
 from models import SessionLocal, User
 from handlers.admin import is_admin, ADMIN_IDS
 from utils.scheduler import send_daily_practice_reminder
-from handlers.practices_stage5 import handle_stage5_start_substep, handle_stage5_next_substep
+from handlers.practices_stage5 import handle_stage5_start_substep, handle_stage5_next_substep, handle_stage5_prev_substep
 
 logger = logging.getLogger(__name__)
 
