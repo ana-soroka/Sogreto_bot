@@ -1147,6 +1147,24 @@ async def handle_continue_practice(query, user, db):
     logger.info(f"Пользователь {user.telegram_id} продолжил практику: stage={current_stage}, step={step.get('step_id')}")
 
 
+async def handle_continue_practice_logic(query, user_id: int):
+    """
+    Обёртка для handle_continue_practice, используется из главного меню.
+    Получает пользователя из БД и вызывает основную логику.
+    """
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter_by(telegram_id=user_id).first()
+        if not user:
+            await query.message.reply_text(
+                "Вы ещё не начали практики. Нажмите /start"
+            )
+            return
+        await handle_continue_practice(query, user, db)
+    finally:
+        db.close()
+
+
 async def handle_confirm_reset(query, user, db):
     """Подтвердить сброс прогресса и начать заново"""
     from utils.db import reset_user_progress, update_user_progress

@@ -1,9 +1,15 @@
 """Handlers package for Sogreto Bot commands"""
 
-from .start import start_command, help_command, handle_start_callback
+from .start import (
+    start_command,
+    handle_start_callback,
+    menu_command,
+    handle_menu_button,
+    handle_menu_callback
+)
 from .user import status_command, pause_command, resume_command, reset_command
 from .content import examples_command, recipes_command, manifesto_command, contact_command
-from .practices import start_practice_command, handle_practice_callback
+from .practices import start_practice_command, handle_practice_callback, handle_continue_practice_logic
 from .settings import (
     set_time_command,
     timezone_command,
@@ -16,8 +22,11 @@ from .webapp import handle_web_app_data
 __all__ = [
     # Start handlers
     'start_command',
-    'help_command',
     'handle_start_callback',
+    # Menu handlers
+    'menu_command',
+    'handle_menu_button',
+    'handle_menu_callback',
     # User management
     'status_command',
     'pause_command',
@@ -31,6 +40,7 @@ __all__ = [
     # Practices
     'start_practice_command',
     'handle_practice_callback',
+    'handle_continue_practice_logic',
     # Settings
     'set_time_command',
     'timezone_command',

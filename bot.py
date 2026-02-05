@@ -24,8 +24,10 @@ from utils.scheduler import init_scheduler, schedule_user_reminders, stop_schedu
 # Импортируем обработчики из handlers/
 from handlers import (
     start_command,
-    help_command,
     handle_start_callback,
+    menu_command,
+    handle_menu_button,
+    handle_menu_callback,
     status_command,
     pause_command,
     resume_command,
@@ -102,17 +104,15 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик неизвестных команд"""
     await update.message.reply_text(
         "Извините, я не понимаю эту команду.\n"
-        "Используйте /help чтобы увидеть список доступных команд."
+        "Используйте кнопку 📋 Меню или /menu для доступа к функциям."
     )
 
 
 @error_handler
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текстовых сообщений (не команд)"""
-    await update.message.reply_text(
-        "Используйте команды для взаимодействия со мной.\n"
-        "Введите /help чтобы увидеть список команд."
-    )
+    # Пропускаем сообщения, которые обрабатываются другими хендлерами (например, кнопка Меню)
+    pass
 
 
 # ============================================================================
@@ -145,7 +145,7 @@ def main():
 
     # Зарегистрировать обработчики команд
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("menu", menu_command))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("pause", pause_command))
     application.add_handler(CommandHandler("resume", resume_command))
@@ -176,14 +176,18 @@ def main():
     application.add_handler(CallbackQueryHandler(handle_time_callback, pattern="^time_"))
     application.add_handler(CallbackQueryHandler(handle_timezone_callback, pattern="^tz_"))
     application.add_handler(CallbackQueryHandler(handle_start_callback, pattern="^start_"))
+    application.add_handler(CallbackQueryHandler(handle_menu_callback, pattern="^menu_"))
 
     # Обработчик Web App данных (должен быть перед текстовыми обработчиками)
     application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
 
+    # Обработчик кнопки "📋 Меню" (ReplyKeyboard) - должен быть перед общим текстовым обработчиком
+    application.add_handler(MessageHandler(filters.Text(["📋 Меню"]), handle_menu_button))
+
     # Обработчик неизвестных команд
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
-    # Обработчик текстовых сообщений
+    # Обработчик текстовых сообщений (игнорируем остальные)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Глобальный обработчик ошибок
