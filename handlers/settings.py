@@ -102,9 +102,7 @@ async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.edit_message_text(
                 f"✅ **Время напоминаний установлено!**\n\n"
                 f"Вы будете получать напоминания о практиках каждый день в **{time_str}**.\n\n"
-                f"Часовой пояс: {user.timezone}\n\n"
-                f"Чтобы изменить время, используйте /set_time снова.\n"
-                f"Чтобы изменить часовой пояс, используйте /timezone"
+                f"Часовой пояс: {user.timezone}"
             )
 
             logger.info(f"Пользователь {user_id} установил время напоминаний: {time_str}")
@@ -191,8 +189,7 @@ async def handle_timezone_callback(update: Update, context: ContextTypes.DEFAULT
             await query.edit_message_text(
                 f"✅ **Часовой пояс установлен!**\n\n"
                 f"Ваш часовой пояс: **{timezone_str}**\n"
-                f"Текущее время: **{current_time}**\n\n"
-                f"Теперь установите время напоминаний: /set_time"
+                f"Текущее время: **{current_time}**"
             )
 
             logger.info(f"Пользователь {user_id} установил часовой пояс: {timezone_str}")
