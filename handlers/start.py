@@ -179,12 +179,13 @@ async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
     elif action == "menu_timezone":
-        # Показать выбор часового пояса
+        # Показать выбор часового пояса (города РФ)
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🇷🇺 Москва (UTC+3)", callback_data="tz_Europe/Moscow")],
-            [InlineKeyboardButton("🇰🇿 Астана (UTC+5)", callback_data="tz_Asia/Almaty")],
-            [InlineKeyboardButton("🇺🇦 Киев (UTC+2)", callback_data="tz_Europe/Kiev")],
-            [InlineKeyboardButton("🇧🇾 Минск (UTC+3)", callback_data="tz_Europe/Minsk")],
+            [InlineKeyboardButton("🇷🇺 Самара (UTC+4)", callback_data="tz_Europe/Samara")],
+            [InlineKeyboardButton("🇷🇺 Екатеринбург (UTC+5)", callback_data="tz_Asia/Yekaterinburg")],
+            [InlineKeyboardButton("🇷🇺 Новосибирск (UTC+7)", callback_data="tz_Asia/Novosibirsk")],
+            [InlineKeyboardButton("🇷🇺 Владивосток (UTC+10)", callback_data="tz_Asia/Vladivostok")],
         ])
         await query.message.reply_text(
             "🌍 **Часовой пояс**\n\nВыберите ваш часовой пояс:",
