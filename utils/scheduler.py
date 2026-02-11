@@ -246,7 +246,7 @@ async def send_practice_reminder(bot: Bot, user_id: int):
         should_send, message = should_send_reminder(user, days)
 
         if should_send and message:
-            # Добавить кнопку для напоминаний о всходах (дни 2-5, этап 1)
+            # Добавить кнопку в зависимости от этапа
             keyboard = None
             if user.current_stage == 1 and user.current_step >= 6 and 2 <= days <= 5:
                 if days == 5:
@@ -260,6 +260,11 @@ async def send_practice_reminder(bot: Bot, user_id: int):
                     keyboard = InlineKeyboardMarkup([
                         [InlineKeyboardButton("✅ У меня появились первые всходы!", callback_data="sprouts_appeared")]
                     ])
+            elif user.current_stage == 6:
+                # Финальный этап: кнопка для начала финала
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🎉 Приступить к финалу", callback_data="start_stage6_finale")]
+                ])
 
             await bot.send_message(
                 chat_id=user_id,
