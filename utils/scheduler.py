@@ -101,6 +101,10 @@ def should_send_reminder(user, days_since_start):
     current_stage = user.current_stage
     current_step = user.current_step
 
+    # Практики завершены — не отправлять уведомления
+    if current_stage > 6:
+        return False, None
+
     # ЭТАП 1 (Посадка) - пользователь сделал посадку (step 6 завершён)
     if current_stage == 1:
         # Если завершил Этап 1 (все 6 шагов) И ещё не нажал кнопку "Всходы появились"
