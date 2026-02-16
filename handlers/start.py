@@ -76,6 +76,7 @@ def get_menu_keyboard():
     """Создать клавиатуру главного меню"""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("▶️ Продолжить практику", callback_data="menu_continue")],
+        [InlineKeyboardButton("⚠️ Что-то пошло не так", callback_data="menu_problem")],
         [InlineKeyboardButton("🔄 Начать заново", callback_data="menu_reset")],
         [InlineKeyboardButton("📊 Мой прогресс", callback_data="menu_status")],
         [InlineKeyboardButton("⏰ Время напоминаний", callback_data="menu_set_time")],
@@ -200,6 +201,106 @@ async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             "По всем вопросам пишите:\n"
             "💬 Telegram: @sogreto_support\n\n"
             "Мы ответим в течение 24 часов."
+        )
+
+    elif action == "menu_problem":
+        # Показать подменю "Что-то пошло не так"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🍄 Плесень", callback_data="menu_mold")],
+            [InlineKeyboardButton("💀 Всё погибло", callback_data="menu_all_dead")],
+        ])
+        await query.message.reply_text(
+            "⚠️ **Что-то пошло не так?**\n\n"
+            "Выбери, что случилось:",
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+
+    elif action == "menu_mold":
+        # Плесень — вызвать существующий сценарий
+        db = SessionLocal()
+        try:
+            db_user = db.query(User).filter_by(telegram_id=user_id).first()
+            if not db_user:
+                await query.message.reply_text("Вы ещё не начали практики. Нажмите /start")
+                return
+            if db_user.current_stage <= 2:
+                from handlers.practices import handle_mold_start
+                await handle_mold_start(query, db_user, db)
+            else:
+                from handlers.practices import handle_mold_sprouts_start
+                await handle_mold_sprouts_start(query, db_user, db)
+        finally:
+            db.close()
+
+    elif action == "menu_all_dead":
+        # Подтверждение "Всё погибло"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Да, начать посев заново", callback_data="menu_confirm_dead")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="menu_cancel_dead")],
+        ])
+        await query.message.reply_text(
+            "💀 **Всё погибло?**\n\n"
+            "Не переживай, такое бывает! Мы начнём посев заново.\n\n"
+            "Прогресс будет сброшен, и ты пройдёшь цикл посева с начала.\n"
+            "После посева снова начнут приходить напоминания о всходах.",
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+
+    elif action == "menu_confirm_dead":
+        # Сброс и начало нового цикла посева
+        from utils.db import reset_user_progress, update_user_progress
+        from handlers.practices import create_practice_keyboard
+        from utils import practices_manager
+        from datetime import datetime
+
+        db = SessionLocal()
+        try:
+            db_user = db.query(User).filter_by(telegram_id=user_id).first()
+            if not db_user:
+                await query.message.reply_text("Ошибка: пользователь не найден")
+                return
+
+            # Сбросить прогресс
+            reset_user_progress(db, user_id)
+
+            # Обновить на Stage 1, Step 1
+            update_user_progress(db, user_id, stage_id=1, step_id=1, day=1)
+
+            # Сбросить таймер и включить ожидание всходов
+            db_user.started_at = datetime.utcnow()
+            db_user.awaiting_sprouts = True
+            db.commit()
+
+            # Показать первую практику посева
+            first_step = practices_manager.get_step(stage_id=1, step_id=1)
+            if not first_step:
+                await query.message.reply_text("Ошибка загрузки практик")
+                return
+
+            message = "🌱 **Начинаем посев заново!**\n\n"
+            message += f"**{first_step.get('title', '')}**\n\n"
+            message += first_step.get('message', '')
+
+            buttons = first_step.get('buttons', [])
+            keyboard = create_practice_keyboard(buttons)
+
+            await query.message.reply_text(
+                message,
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+            logger.info(f"Пользователь {user_id} начал посев заново (всё погибло)")
+        finally:
+            db.close()
+
+    elif action == "menu_cancel_dead":
+        # Отмена — вернуть в меню
+        await query.message.reply_text(
+            "📋 **Главное меню**\n\nВыбери нужное действие:",
+            reply_markup=get_menu_keyboard(),
+            parse_mode='Markdown'
         )
 
 
