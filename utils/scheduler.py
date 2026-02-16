@@ -680,6 +680,13 @@ async def check_and_send_reminders(bot: Bot):
                             continue
 
                         if user.current_stage == 3 and user.daily_practice_day >= 1:
+                            # Проверить, не отправляли ли уже напоминание сегодня
+                            if user.last_reminder_sent:
+                                last_reminder_user_tz = user.last_reminder_sent.replace(tzinfo=pytz.utc).astimezone(user_tz)
+                                if last_reminder_user_tz.date() == now_user_tz.date():
+                                    logger.debug(f"Напоминание Stage 3 для пользователя {user.telegram_id} уже отправлено сегодня")
+                                    continue
+
                             # Проверить, не выполнена ли уже практика сегодня
                             today_str = now_user_tz.date().strftime('%Y-%m-%d')
 
@@ -752,6 +759,13 @@ async def check_and_send_reminders(bot: Bot):
                             continue
 
                         if user.current_stage == 5 and user.daily_practice_day >= 1:
+                            # Проверить, не отправляли ли уже напоминание сегодня
+                            if user.last_reminder_sent:
+                                last_reminder_user_tz = user.last_reminder_sent.replace(tzinfo=pytz.utc).astimezone(user_tz)
+                                if last_reminder_user_tz.date() == now_user_tz.date():
+                                    logger.debug(f"Напоминание Stage 5 для пользователя {user.telegram_id} уже отправлено сегодня")
+                                    continue
+
                             # Проверить, не выполнена ли уже практика сегодня
                             today_str = now_user_tz.date().strftime('%Y-%m-%d')
 
