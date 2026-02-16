@@ -537,6 +537,11 @@ async def handle_practice_callback(update: Update, context: ContextTypes.DEFAULT
             await handle_mold_sprouts_start(query, user, db)
         elif action == "mold_sprouts_complete":
             await handle_mold_sprouts_complete(query, user, db)
+        elif action.startswith("all_dead_step_"):
+            step_id = int(action.split("_")[-1])
+            await handle_all_dead_step(query, user, db, step_id)
+        elif action == "all_dead_complete":
+            await handle_all_dead_complete(query, user, db)
         else:
             await query.edit_message_text(
                 f"Действие '{action}' пока не реализовано.\n"
@@ -1766,3 +1771,69 @@ async def handle_mold_sprouts_complete(query, user, db):
         parse_mode='Markdown'
     )
     logger.info(f"Пользователь {user.telegram_id} завершил сценарий 'Плесень на ростках'")
+
+
+# ==================== СЦЕНАРИЙ "ВСЁ ПОГИБЛО" ====================
+
+async def handle_all_dead_start(query, user, db):
+    """Начать сценарий 'Всё погибло' - показать шаг 1"""
+    logger.info(f"Пользователь {user.telegram_id} начал сценарий 'Всё погибло'")
+    await handle_all_dead_step(query, user, db, 1)
+
+
+async def handle_all_dead_step(query, user, db, step_id: int):
+    """Показать указанный шаг сценария 'Всё погибло'"""
+    all_dead = practices_manager.get_all_dead_scenario()
+    if not all_dead:
+        await query.edit_message_text("Ошибка: сценарий не найден")
+        return
+
+    step = None
+    for s in all_dead.get('steps', []):
+        if s.get('step_id') == step_id:
+            step = s
+            break
+
+    if not step:
+        await query.edit_message_text(f"Ошибка: шаг {step_id} не найден")
+        return
+
+    message = f"**{step.get('title', '')}**\n\n{step.get('message', '')}"
+    keyboard = create_practice_keyboard(step.get('buttons', []))
+
+    await query.edit_message_text(message, reply_markup=keyboard, parse_mode='Markdown')
+    logger.info(f"Пользователь {user.telegram_id} на шаге {step_id} сценария 'Всё погибло'")
+
+
+async def handle_all_dead_complete(query, user, db):
+    """Завершить сценарий 'Всё погибло' — сброс и ожидание всходов"""
+    from utils.db import reset_user_progress, update_user_progress
+    from datetime import datetime
+
+    logger.info(f"Пользователь {user.telegram_id} завершает сценарий 'Всё погибло'")
+
+    # Сбросить прогресс
+    reset_user_progress(db, user.telegram_id)
+
+    # Установить Stage 1 Step 1
+    update_user_progress(db, user.telegram_id, stage_id=1, step_id=1, day=1)
+
+    # Сбросить таймер и включить ожидание всходов
+    user.started_at = datetime.utcnow()
+    user.awaiting_sprouts = True
+    db.commit()
+
+    # Показать финальное сообщение с кнопкой "Появились первые всходы"
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Появились первые всходы", callback_data="sprouts_appeared")]
+    ])
+
+    await query.edit_message_text(
+        "🌱 **Жди уведомлений о всходах, удачи!**\n\n"
+        "Я буду присылать напоминания проверить горшок.\n"
+        "Как только увидишь первые зелёные петельки — нажми кнопку!",
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
+
+    logger.info(f"Пользователь {user.telegram_id} завершил сценарий 'Всё погибло', started_at сброшен")

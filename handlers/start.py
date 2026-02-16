@@ -249,49 +249,15 @@ async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
     elif action == "menu_confirm_dead":
-        # Сброс и начало нового цикла посева
-        from utils.db import reset_user_progress, update_user_progress
-        from handlers.practices import create_practice_keyboard
-        from utils import practices_manager
-        from datetime import datetime
-
+        # Запустить сценарий "Всё погибло" (5 шагов)
         db = SessionLocal()
         try:
             db_user = db.query(User).filter_by(telegram_id=user_id).first()
             if not db_user:
                 await query.message.reply_text("Ошибка: пользователь не найден")
                 return
-
-            # Сбросить прогресс
-            reset_user_progress(db, user_id)
-
-            # Обновить на Stage 1, Step 1
-            update_user_progress(db, user_id, stage_id=1, step_id=1, day=1)
-
-            # Сбросить таймер и включить ожидание всходов
-            db_user.started_at = datetime.utcnow()
-            db_user.awaiting_sprouts = True
-            db.commit()
-
-            # Показать первую практику посева
-            first_step = practices_manager.get_step(stage_id=1, step_id=1)
-            if not first_step:
-                await query.message.reply_text("Ошибка загрузки практик")
-                return
-
-            message = "🌱 **Начинаем посев заново!**\n\n"
-            message += f"**{first_step.get('title', '')}**\n\n"
-            message += first_step.get('message', '')
-
-            buttons = first_step.get('buttons', [])
-            keyboard = create_practice_keyboard(buttons)
-
-            await query.message.reply_text(
-                message,
-                reply_markup=keyboard,
-                parse_mode='Markdown'
-            )
-            logger.info(f"Пользователь {user_id} начал посев заново (всё погибло)")
+            from handlers.practices import handle_all_dead_start
+            await handle_all_dead_start(query, db_user, db)
         finally:
             db.close()
 
