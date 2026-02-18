@@ -1,2 +1,1 @@
-worker: python bot.py
-vk_worker: python vk_bot.py
+worker: python bot.py & python vk_bot.py & wait
