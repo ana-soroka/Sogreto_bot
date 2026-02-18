@@ -55,46 +55,83 @@ bot = Bot(token=VK_TOKEN)
 @bot.on.message(text=["Начать", "начать", "Start", "start"])
 async def handle_start(message: Message):
     """Приветствие"""
-    from vk_handlers.start import vk_start_command
-    await vk_start_command(bot.api, message)
+    try:
+        from vk_handlers.start import vk_start_command
+        await vk_start_command(bot.api, message)
+    except Exception as e:
+        logger.error(f"[VK] Ошибка в handle_start: {e}", exc_info=True)
 
 
 @bot.on.message(text=["Меню", "меню", "📋 Меню", "Menu", "menu"])
 async def handle_menu(message: Message):
     """Главное меню"""
-    from vk_handlers.start import vk_menu_command
-    await vk_menu_command(bot.api, message)
+    try:
+        from vk_handlers.start import vk_menu_command
+        await vk_menu_command(bot.api, message)
+    except Exception as e:
+        logger.error(f"[VK] Ошибка в handle_menu: {e}", exc_info=True)
 
 
 @bot.on.message(text=["Статус", "статус", "Status"])
 async def handle_status(message: Message):
     """Показать прогресс"""
-    from vk_handlers.user import vk_status_command
-    await vk_status_command(bot.api, message)
+    try:
+        from vk_handlers.user import vk_status_command
+        await vk_status_command(bot.api, message)
+    except Exception as e:
+        logger.error(f"[VK] Ошибка в handle_status: {e}", exc_info=True)
 
 
 @bot.on.message(text=["Пауза", "пауза", "Pause"])
 async def handle_pause(message: Message):
     """Пауза практик"""
-    from vk_handlers.user import vk_pause_command
-    await vk_pause_command(bot.api, message)
+    try:
+        from vk_handlers.user import vk_pause_command
+        await vk_pause_command(bot.api, message)
+    except Exception as e:
+        logger.error(f"[VK] Ошибка в handle_pause: {e}", exc_info=True)
 
 
 @bot.on.message(text=["Продолжить", "продолжить", "Resume"])
 async def handle_resume(message: Message):
     """Возобновить практики"""
-    from vk_handlers.user import vk_resume_command
-    await vk_resume_command(bot.api, message)
+    try:
+        from vk_handlers.user import vk_resume_command
+        await vk_resume_command(bot.api, message)
+    except Exception as e:
+        logger.error(f"[VK] Ошибка в handle_resume: {e}", exc_info=True)
 
 
 @bot.on.message()
 async def handle_other(message: Message):
-    """Все остальные сообщения"""
-    await message.answer(
-        "Я не понимаю эту команду.\n"
-        "Напиши \"Меню\" для доступа к функциям.",
-        keyboard=create_vk_menu_keyboard()
-    )
+    """Все остальные сообщения — также обрабатываем текстовые команды как fallback"""
+    try:
+        text = (message.text or "").strip().lower()
+        logger.info(f"[VK] handle_other: from_id={message.from_id}, text={repr(message.text)}")
+
+        if text in ("меню", "menu", "📋 меню"):
+            from vk_handlers.start import vk_menu_command
+            await vk_menu_command(bot.api, message)
+        elif text in ("начать", "start"):
+            from vk_handlers.start import vk_start_command
+            await vk_start_command(bot.api, message)
+        elif text in ("статус", "status"):
+            from vk_handlers.user import vk_status_command
+            await vk_status_command(bot.api, message)
+        elif text in ("пауза", "pause"):
+            from vk_handlers.user import vk_pause_command
+            await vk_pause_command(bot.api, message)
+        elif text in ("продолжить", "resume"):
+            from vk_handlers.user import vk_resume_command
+            await vk_resume_command(bot.api, message)
+        else:
+            await message.answer(
+                "Я не понимаю эту команду.\n"
+                "Напиши \"Меню\" для доступа к функциям.",
+                keyboard=create_vk_menu_keyboard()
+            )
+    except Exception as e:
+        logger.error(f"[VK] Ошибка в handle_other: {e}", exc_info=True)
 
 
 # ==================== CALLBACK-КНОПКИ ====================
