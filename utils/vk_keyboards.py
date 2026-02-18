@@ -43,21 +43,28 @@ def create_vk_menu_keyboard() -> str:
     return json.dumps(keyboard, ensure_ascii=False)
 
 
-def create_vk_callback_keyboard(buttons: list) -> str:
+def create_vk_callback_keyboard(buttons: list, cols: int = 1) -> str:
     """
     Создать inline-клавиатуру из списка кортежей (text, action).
 
     Input: [("Текст", "callback_data"), ...]
+    cols: количество кнопок в ряду (VK лимит: 6 рядов, 5 кнопок в ряду)
     """
     kb_buttons = []
+    row = []
     for text, action in buttons:
-        kb_buttons.append([{
+        row.append({
             "action": {
                 "type": "callback",
                 "label": text[:40],
                 "payload": json.dumps({"action": action})
             }
-        }])
+        })
+        if len(row) == cols:
+            kb_buttons.append(row)
+            row = []
+    if row:
+        kb_buttons.append(row)
 
     keyboard = {
         "inline": True,

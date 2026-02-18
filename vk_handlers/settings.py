@@ -38,7 +38,7 @@ async def vk_show_time_selection(api, peer_id):
         ("18:00", "time_18:00"),
         ("19:00", "time_19:00"),
         ("20:00", "time_20:00"),
-    ])
+    ], cols=3)
     await _send(api, peer_id,
                 "⏰ Время напоминаний\n\nВыберите удобное время:",
                 keyboard=keyboard)

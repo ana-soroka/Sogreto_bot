@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_vk_menu_keyboard():
-    """Клавиатура главного меню"""
+    """Клавиатура главного меню (макс. 6 рядов в VK inline)"""
     return create_vk_callback_keyboard([
         ("▶️ Продолжить практику", "menu_continue"),
         ("⚠️ Что-то пошло не так", "menu_problem"),
@@ -20,7 +20,7 @@ def _get_vk_menu_keyboard():
         ("⏰ Время напоминаний", "menu_set_time"),
         ("🌍 Часовой пояс", "menu_timezone"),
         ("📞 Поддержка", "menu_contact"),
-    ])
+    ], cols=2)
 
 
 async def _get_vk_user_info(api, user_id: int):
