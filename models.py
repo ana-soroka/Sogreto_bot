@@ -21,6 +21,7 @@ if DATABASE_URL.startswith('postgres://'):
 engine = create_engine(
     DATABASE_URL,
     echo=False,  # Отключить логи SQL в продакшене
+    pool_pre_ping=True,  # Проверять соединение перед использованием (защита от EOF/disconnect)
     connect_args={"check_same_thread": False} if DATABASE_URL.startswith('sqlite') else {}
 )
 
