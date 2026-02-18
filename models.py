@@ -34,7 +34,9 @@ class User(Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(BigInteger, unique=True, nullable=False, index=True)
+    platform = Column(String(10), default='telegram', nullable=False)  # 'telegram' или 'vk'
+    telegram_id = Column(BigInteger, unique=True, nullable=True, index=True)
+    vk_id = Column(BigInteger, unique=True, nullable=True, index=True)
     username = Column(String(255), nullable=True)
     first_name = Column(String(255), nullable=True)
     last_name = Column(String(255), nullable=True)
@@ -76,8 +78,13 @@ class User(Base):
     paused_at = Column(DateTime, nullable=True)
     resumed_at = Column(DateTime, nullable=True)
 
+    @property
+    def platform_id(self):
+        """Вернуть ID пользователя на его платформе"""
+        return self.telegram_id if self.platform == 'telegram' else self.vk_id
+
     def __repr__(self):
-        return f"<User(telegram_id={self.telegram_id}, stage={self.current_stage}, day={self.current_day})>"
+        return f"<User(platform={self.platform}, id={self.platform_id}, stage={self.current_stage}, day={self.current_day})>"
 
 
 class UserProgress(Base):
@@ -152,6 +159,27 @@ def init_db():
                     print("OK: Миграция telegram_id завершена")
         except Exception as e:
             print(f"Предупреждение при миграции: {e}")
+
+    # Миграция: добавить поддержку VK (platform, vk_id)
+    if not DATABASE_URL.startswith('sqlite'):
+        try:
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                # Проверить, есть ли колонка platform
+                result = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'users' AND column_name = 'platform'"
+                ))
+                if not result.fetchone():
+                    print("Миграция: добавляем поддержку VK...")
+                    conn.execute(text("ALTER TABLE users ADD COLUMN platform VARCHAR(10) DEFAULT 'telegram' NOT NULL"))
+                    conn.execute(text("ALTER TABLE users ADD COLUMN vk_id BIGINT UNIQUE"))
+                    conn.execute(text("ALTER TABLE users ALTER COLUMN telegram_id DROP NOT NULL"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_vk_id ON users (vk_id)"))
+                    conn.commit()
+                    print("OK: Миграция VK завершена")
+        except Exception as e:
+            print(f"Предупреждение при миграции VK: {e}")
 
     print("OK: База данных инициализирована")
 

@@ -48,6 +48,42 @@ def get_or_create_user(db: Session, telegram_id: int, username: str = None,
     return user
 
 
+def get_or_create_vk_user(db: Session, vk_id: int,
+                          first_name: str = None, last_name: str = None) -> User:
+    """
+    Получить существующего VK-пользователя или создать нового
+
+    Args:
+        db: Сессия БД
+        vk_id: ID пользователя ВКонтакте
+        first_name: Имя
+        last_name: Фамилия
+
+    Returns:
+        User: Объект пользователя
+    """
+    user = db.query(User).filter(User.vk_id == vk_id).first()
+
+    if not user:
+        user = User(
+            platform='vk',
+            vk_id=vk_id,
+            first_name=first_name,
+            last_name=last_name
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        logger.info(f"Создан новый VK-пользователь: {vk_id}")
+    else:
+        user.first_name = first_name
+        user.last_name = last_name
+        user.last_interaction = datetime.utcnow()
+        db.commit()
+
+    return user
+
+
 def update_user_progress(db: Session, telegram_id: int, stage_id: int,
                         step_id: int, day: int, user_response: str = None):
     """
@@ -141,6 +177,45 @@ def get_user_stats(db: Session, telegram_id: int) -> dict:
         'created_at': user.created_at,
         'last_interaction': user.last_interaction
     }
+
+
+def update_user_progress_obj(db: Session, user, stage_id: int,
+                             step_id: int, day: int, user_response: str = None):
+    """
+    Обновить прогресс пользователя (platform-agnostic, принимает объект User)
+    """
+    user.current_stage = stage_id
+    user.current_step = step_id
+    user.current_day = day
+    user.last_interaction = datetime.utcnow()
+
+    progress = UserProgress(
+        user_telegram_id=user.platform_id,
+        stage_id=stage_id,
+        step_id=step_id,
+        day=day,
+        user_response=user_response
+    )
+    db.add(progress)
+    db.commit()
+    logger.info(f"Обновлён прогресс {user.platform}:{user.platform_id}: stage={stage_id}, step={step_id}, day={day}")
+
+
+def reset_user_progress_obj(db: Session, user):
+    """Сбросить прогресс пользователя (platform-agnostic)"""
+    user.current_stage = 1
+    user.current_step = 1
+    user.current_day = 1
+    user.is_paused = False
+    user.paused_at = None
+    user.daily_practice_day = 0
+    user.daily_practice_substep = ""
+    user.last_practice_date = None
+    user.reminder_postponed = False
+    user.postponed_until = None
+    user.awaiting_sprouts = False
+    db.commit()
+    logger.info(f"Прогресс {user.platform}:{user.platform_id} сброшен")
 
 
 def delete_user_data(db: Session, telegram_id: int):

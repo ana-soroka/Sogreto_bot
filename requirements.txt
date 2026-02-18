@@ -1,5 +1,6 @@
 # Core dependencies
 python-telegram-bot==20.7
+vkbottle==4.3.12
 python-dotenv==1.0.0
 
 # Scheduling and database
