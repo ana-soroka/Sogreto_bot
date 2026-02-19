@@ -162,7 +162,7 @@ async def handle_callback(event: GroupTypes.MessageEvent):
         )
 
         # --- Start callbacks ---
-        if action.startswith("start_"):
+        if action in ("start_show_status", "start_practice_from_start"):
             from vk_handlers.start import vk_handle_start_callback
             await vk_handle_start_callback(bot.api, peer_id, user_id, cmid, action)
 
