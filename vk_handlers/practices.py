@@ -422,8 +422,7 @@ async def _handle_stage1_timezone(api, peer_id, cmid, user, db, action):
         ("19:00", "stage1_time_19:00"),
         ("20:00", "stage1_time_20:00"),
         ("21:00", "stage1_time_21:00"),
-        ("22:00", "stage1_time_22:00"),
-    ], cols=4)
+    ], cols=5)
 
     await _edit(api, peer_id, cmid,
                 f"⏰ Настройка времени напоминаний\n\n"
