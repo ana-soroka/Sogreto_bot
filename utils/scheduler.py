@@ -11,10 +11,38 @@ from models import SessionLocal, User
 from utils.practices import practices_manager
 import pytz
 
+import os
+
 logger = logging.getLogger(__name__)
 
 # Глобальный планировщик
 scheduler = AsyncIOScheduler()
+
+# VK API (lazy init)
+VK_BOT_TOKEN = os.getenv('VK_BOT_TOKEN')
+_vk_api = None
+
+
+def _get_vk_api():
+    """Получить VK API инстанс (lazy init, синглтон)"""
+    global _vk_api
+    if _vk_api is None and VK_BOT_TOKEN:
+        from vkbottle import API
+        _vk_api = API(token=VK_BOT_TOKEN)
+    return _vk_api
+
+
+async def _send_vk_message(vk_id: int, text: str, keyboard_json: str = None):
+    """Отправить сообщение VK-пользователю через standalone API"""
+    from utils.formatting import markdown_to_plain
+    vk_api = _get_vk_api()
+    if not vk_api:
+        logger.warning(f"[VK] API не настроен, пропуск vk:{vk_id}")
+        return
+    kwargs = {"peer_id": vk_id, "message": markdown_to_plain(text), "random_id": 0}
+    if keyboard_json:
+        kwargs["keyboard"] = keyboard_json
+    await vk_api.messages.send(**kwargs)
 
 
 def init_scheduler():
@@ -593,6 +621,174 @@ async def send_stage5_daily_reminder(bot: Bot, user, db):
         logger.error(f"Ошибка при отправке напоминания Stage 5 пользователю {user.telegram_id}: {e}")
 
 
+async def send_stage2_sprouts_reminder_vk(user, db, day: int):
+    """VK: Напоминание о проверке всходов (Stage 1 awaiting_sprouts, дни 2-5)"""
+    from utils.vk_keyboards import create_vk_callback_keyboard
+    messages = {
+        2: (
+            "🌱 Пора проверить всходы!\n\n"
+            "Прошло 2 дня с момента посадки. Обычно в это время появляются первые ростки.\n\n"
+            "Загляните в горшок — видите зелёные петельки?"
+        ),
+        3: (
+            "🌿 Напоминание о всходах\n\n"
+            "Уже 3 дня с момента посадки. Проверьте горшок — появились ли ростки?\n\n"
+            "Если нет — не переживайте, иногда семенам нужно чуть больше времени."
+        ),
+        4: (
+            "🌾 Проверка всходов\n\n"
+            "4-й день после посадки. Если ростки ещё не показались — проверьте:\n"
+            "• Достаточно ли влаги в почве?\n"
+            "• Накрыт ли горшок крышкой?\n"
+            "• Стоит ли в тёплом месте?"
+        ),
+        5: (
+            "🌱 День 5: Проверка всходов\n\n"
+            "Прошло 5 дней с момента посадки. Обычно к этому времени появляются заметные ростки.\n\n"
+            "Посмотри в горшок — что ты видишь?"
+        ),
+    }
+    message = messages.get(day, messages[2])
+    if day == 5:
+        keyboard = create_vk_callback_keyboard([
+            ("✅ Всходы появились!", "sprouts_appeared"),
+            ("🍄 Плесень / проблема", "mold_start"),
+            ("😔 Салат не взошёл", "replant_start"),
+        ], cols=2)
+    else:
+        keyboard = create_vk_callback_keyboard([
+            ("✅ Первые всходы появились!", "sprouts_appeared"),
+            ("🍄 Плесень / проблема", "mold_start"),
+        ], cols=2)
+    try:
+        await _send_vk_message(user.vk_id, message, keyboard)
+        logger.info(f"[VK] Отправлено напоминание о всходах (день {day}) vk:{user.vk_id}")
+    except Exception as e:
+        logger.error(f"[VK] Ошибка напоминания о всходах vk:{user.vk_id}: {e}")
+
+
+async def send_daily_practice_reminder_vk(user, db):
+    """VK: Напоминание о ежедневной практике (Stage 3)"""
+    from utils.vk_keyboards import create_vk_callback_keyboard
+    try:
+        current_day = user.daily_practice_day
+        stage = practices_manager.get_stage(3)
+        if not stage:
+            return
+        daily_practices = stage.get('daily_practices', [])
+        practice = next((p for p in daily_practices if p.get('day') == current_day), None)
+        if not practice:
+            logger.error(f"[VK] Практика дня {current_day} не найдена в Stage 3")
+            return
+        reminder = practice.get('reminder', {})
+        if not reminder:
+            return
+        message = reminder.get('message', '')
+        buttons_data = reminder.get('buttons', [])
+        buttons = [(b['text'], b['action']) for b in buttons_data if b.get('text') and b.get('action')]
+        buttons.append(("🍄 Плесень / проблема", "mold_sprouts_start"))
+        keyboard = create_vk_callback_keyboard(buttons)
+        await _send_vk_message(user.vk_id, message, keyboard)
+        logger.info(f"[VK] Отправлено напоминание Stage 3 (день {current_day}) vk:{user.vk_id}")
+    except Exception as e:
+        logger.error(f"[VK] Ошибка напоминания Stage 3 vk:{user.vk_id}: {e}")
+
+
+async def send_stage4_reminder_vk(user, db):
+    """VK: Напоминание о практике Stage 4 (Якорь)"""
+    from utils.vk_keyboards import create_vk_callback_keyboard
+    from utils.db import update_user_progress_obj
+    try:
+        stage = practices_manager.get_stage(4)
+        if not stage:
+            return
+        steps = stage.get('steps', [])
+        if not steps:
+            return
+        first_step = steps[0]
+
+        update_user_progress_obj(db, user, stage_id=4, step_id=12, day=user.current_day)
+        user.daily_practice_day = 0
+        user.daily_practice_substep = ""
+        db.commit()
+
+        message = (
+            "🌱 Пора собирать первый урожай!\n\n"
+            "Твоя микрозелень готова! Пришло время практики «Якорь» — "
+            "мы свяжем твои желания с первыми результатами.\n\n"
+            f"{first_step.get('title', '')}\n\n{first_step.get('message', '')}"
+        )
+        buttons_data = first_step.get('buttons', [])
+        if buttons_data:
+            buttons = [(b['text'], b['action']) for b in buttons_data]
+        else:
+            buttons = [("Начать практику", "next_step")]
+        buttons.append(("🍄 Плесень / проблема", "mold_sprouts_start"))
+        keyboard = create_vk_callback_keyboard(buttons)
+        await _send_vk_message(user.vk_id, message, keyboard)
+        logger.info(f"[VK] Отправлено напоминание Stage 4 vk:{user.vk_id}")
+    except Exception as e:
+        logger.error(f"[VK] Ошибка напоминания Stage 4 vk:{user.vk_id}: {e}")
+
+
+async def send_stage5_daily_reminder_vk(user, db):
+    """VK: Напоминание о ежедневной практике Stage 5"""
+    from utils.vk_keyboards import create_vk_callback_keyboard
+    try:
+        current_day = user.daily_practice_day
+        stage = practices_manager.get_stage(5)
+        if not stage:
+            return
+        daily_practices = stage.get('daily_practices', [])
+        practice = next((p for p in daily_practices if p.get('day') == current_day), None)
+        if not practice:
+            logger.error(f"[VK] Практика Stage 5 дня {current_day} не найдена")
+            return
+        theme = practice.get('theme', '')
+        message = (
+            f"🌱 День {current_day} из 7: {theme}\n\n"
+            "Пришло время ежедневной практики с долгосрочными целями.\n\n"
+            f"Сегодня мы поработаем с темой «{theme}»."
+        )
+        keyboard = create_vk_callback_keyboard([
+            ("Начать практику", "stage5_start_substep"),
+            ("Напомнить позже", "postpone_reminder"),
+            ("🍄 Плесень / проблема", "mold_sprouts_start"),
+        ])
+        await _send_vk_message(user.vk_id, message, keyboard)
+        logger.info(f"[VK] Отправлено напоминание Stage 5 (день {current_day}) vk:{user.vk_id}")
+    except Exception as e:
+        logger.error(f"[VK] Ошибка напоминания Stage 5 vk:{user.vk_id}: {e}")
+
+
+async def send_stage6_reminder_vk(user, db):
+    """VK: Напоминание о начале финальных практик Stage 6"""
+    from utils.vk_keyboards import create_vk_callback_keyboard
+    try:
+        stage = practices_manager.get_stage(6)
+        if not stage:
+            return
+        steps = stage.get('steps', [])
+        first_step = next((s for s in steps if s.get('step_id') == 24), None)
+        if not first_step:
+            return
+        message = (
+            "🎉 Финальный этап!\n\n"
+            "Твой беби-лиф готов! Время завершить практику и насладиться результатом.\n\n"
+            f"{first_step.get('title', 'Признание мастерства')}\n\n"
+            "Сегодня мы пройдём все финальные шаги подряд. Приготовься к празднованию своего успеха! 🌱"
+        )
+        keyboard = create_vk_callback_keyboard([
+            ("Приступить к финалу", "start_stage6_finale"),
+        ])
+        await _send_vk_message(user.vk_id, message, keyboard)
+        user.stage6_reminder_date = None
+        db.commit()
+        logger.info(f"[VK] Отправлено напоминание Stage 6 vk:{user.vk_id}")
+    except Exception as e:
+        logger.error(f"[VK] Ошибка напоминания Stage 6 vk:{user.vk_id}: {e}")
+
+
 async def check_and_send_reminders(bot: Bot):
     """
     Проверить всех пользователей и отправить напоминания тем, кому нужно
@@ -641,17 +837,20 @@ async def check_and_send_reminders(bot: Bot):
                                 if user.last_reminder_sent:
                                     last_reminder_user_tz = user.last_reminder_sent.replace(tzinfo=pytz.utc).astimezone(user_tz)
                                     if last_reminder_user_tz.date() == now_user_tz.date():
-                                        logger.debug(f"Напоминание о всходах для пользователя {user.telegram_id} уже отправлено сегодня")
+                                        logger.debug(f"Напоминание о всходах для пользователя {user.platform_id} уже отправлено сегодня")
                                         continue
 
                                 # Отправить напоминание о всходах
-                                await send_stage2_sprouts_reminder(bot, user, db, day=days_since_start)
+                                if user.platform == 'vk':
+                                    await send_stage2_sprouts_reminder_vk(user, db, day=days_since_start)
+                                else:
+                                    await send_stage2_sprouts_reminder(bot, user, db, day=days_since_start)
 
                                 # Обновить время последнего напоминания
                                 user.last_reminder_sent = now_utc
                                 db.commit()
 
-                                logger.info(f"Отправлено напоминание о всходах (день {days_since_start}) пользователю {user.telegram_id}")
+                                logger.info(f"Отправлено напоминание о всходах (день {days_since_start}) пользователю {user.platform_id}")
                                 continue
 
                         # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЕЖЕДНЕВНЫХ ПРАКТИК ЭТАПА 3
@@ -661,7 +860,7 @@ async def check_and_send_reminders(bot: Bot):
                             if user.last_reminder_sent:
                                 last_reminder_user_tz = user.last_reminder_sent.replace(tzinfo=pytz.utc).astimezone(user_tz)
                                 if last_reminder_user_tz.date() == now_user_tz.date():
-                                    logger.debug(f"Пользователь {user.telegram_id} перешёл на Stage 3 сегодня, ждём завтра")
+                                    logger.debug(f"Пользователь {user.platform_id} перешёл на Stage 3 сегодня, ждём завтра")
                                     continue
 
                             # Пользователь в режиме ожидания, нужно начать первую практику
@@ -669,7 +868,10 @@ async def check_and_send_reminders(bot: Bot):
                             db.commit()
 
                             # Отправить первую ежедневную практику
-                            await send_daily_practice_reminder(bot, user, db)
+                            if user.platform == 'vk':
+                                await send_daily_practice_reminder_vk(user, db)
+                            else:
+                                await send_daily_practice_reminder(bot, user, db)
 
                             # Обновить время последнего напоминания
                             user.last_reminder_sent = now_utc
@@ -681,25 +883,28 @@ async def check_and_send_reminders(bot: Bot):
                             if user.last_reminder_sent:
                                 last_reminder_user_tz = user.last_reminder_sent.replace(tzinfo=pytz.utc).astimezone(user_tz)
                                 if last_reminder_user_tz.date() == now_user_tz.date():
-                                    logger.debug(f"Напоминание Stage 3 для пользователя {user.telegram_id} уже отправлено сегодня")
+                                    logger.debug(f"Напоминание Stage 3 для пользователя {user.platform_id} уже отправлено сегодня")
                                     continue
 
                             # Проверить, не выполнена ли уже практика сегодня
                             today_str = now_user_tz.date().strftime('%Y-%m-%d')
 
                             if user.last_practice_date == today_str:
-                                logger.debug(f"Пользователь {user.telegram_id} уже выполнил практику сегодня")
+                                logger.debug(f"Пользователь {user.platform_id} уже выполнил практику сегодня")
                                 continue
 
                             # Проверить отложенное напоминание
                             if user.reminder_postponed and user.postponed_until:
                                 # Если время ещё не пришло, пропускаем
                                 if now_utc < user.postponed_until:
-                                    logger.debug(f"Напоминание для пользователя {user.telegram_id} отложено до {user.postponed_until}")
+                                    logger.debug(f"Напоминание для пользователя {user.platform_id} отложено до {user.postponed_until}")
                                     continue
 
                             # Отправить ежедневную практику
-                            await send_daily_practice_reminder(bot, user, db)
+                            if user.platform == 'vk':
+                                await send_daily_practice_reminder_vk(user, db)
+                            else:
+                                await send_daily_practice_reminder(bot, user, db)
 
                             # Обновить время последнего напоминания
                             user.last_reminder_sent = now_utc
@@ -713,7 +918,10 @@ async def check_and_send_reminders(bot: Bot):
                             # Если сегодня день напоминания о Stage 4
                             if user.stage4_reminder_date == today_str:
                                 # Отправить напоминание о Stage 4
-                                await send_stage4_reminder(bot, user, db)
+                                if user.platform == 'vk':
+                                    await send_stage4_reminder_vk(user, db)
+                                else:
+                                    await send_stage4_reminder(bot, user, db)
 
                                 # Сбросить флаг напоминания
                                 user.stage4_reminder_date = None
@@ -722,7 +930,7 @@ async def check_and_send_reminders(bot: Bot):
                                 user.last_reminder_sent = now_utc
                                 db.commit()
 
-                                logger.info(f"Отправлено напоминание о Stage 4 пользователю {user.telegram_id}")
+                                logger.info(f"Отправлено напоминание о Stage 4 пользователю {user.platform_id}")
                                 continue
 
                         # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ НАПОМИНАНИЯ О STAGE 6 (Финальный этап)
@@ -732,13 +940,16 @@ async def check_and_send_reminders(bot: Bot):
                             # Если сегодня день напоминания о Stage 6
                             if user.stage6_reminder_date == today_str:
                                 # Отправить напоминание о Stage 6
-                                await send_stage6_reminder(bot, user, db)
+                                if user.platform == 'vk':
+                                    await send_stage6_reminder_vk(user, db)
+                                else:
+                                    await send_stage6_reminder(bot, user, db)
 
                                 # Обновить время последнего напоминания
                                 user.last_reminder_sent = now_utc
                                 db.commit()
 
-                                logger.info(f"Отправлено напоминание о Stage 6 пользователю {user.telegram_id}")
+                                logger.info(f"Отправлено напоминание о Stage 6 пользователю {user.platform_id}")
                                 continue
 
                         # СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ЕЖЕДНЕВНЫХ ПРАКТИК STAGE 5 (До беби-лифа)
@@ -748,7 +959,10 @@ async def check_and_send_reminders(bot: Bot):
                             db.commit()
 
                             # Отправить первую практику Stage 5
-                            await send_stage5_daily_reminder(bot, user, db)
+                            if user.platform == 'vk':
+                                await send_stage5_daily_reminder_vk(user, db)
+                            else:
+                                await send_stage5_daily_reminder(bot, user, db)
 
                             # Обновить время последнего напоминания
                             user.last_reminder_sent = now_utc
@@ -760,25 +974,28 @@ async def check_and_send_reminders(bot: Bot):
                             if user.last_reminder_sent:
                                 last_reminder_user_tz = user.last_reminder_sent.replace(tzinfo=pytz.utc).astimezone(user_tz)
                                 if last_reminder_user_tz.date() == now_user_tz.date():
-                                    logger.debug(f"Напоминание Stage 5 для пользователя {user.telegram_id} уже отправлено сегодня")
+                                    logger.debug(f"Напоминание Stage 5 для пользователя {user.platform_id} уже отправлено сегодня")
                                     continue
 
                             # Проверить, не выполнена ли уже практика сегодня
                             today_str = now_user_tz.date().strftime('%Y-%m-%d')
 
                             if user.last_practice_date == today_str:
-                                logger.debug(f"Пользователь {user.telegram_id} уже выполнил практику Stage 5 сегодня")
+                                logger.debug(f"Пользователь {user.platform_id} уже выполнил практику Stage 5 сегодня")
                                 continue
 
                             # Проверить отложенное напоминание
                             if user.reminder_postponed and user.postponed_until:
                                 # Если время ещё не пришло, пропускаем
                                 if now_utc < user.postponed_until:
-                                    logger.debug(f"Напоминание Stage 5 для пользователя {user.telegram_id} отложено до {user.postponed_until}")
+                                    logger.debug(f"Напоминание Stage 5 для пользователя {user.platform_id} отложено до {user.postponed_until}")
                                     continue
 
                             # Отправить ежедневную практику Stage 5
-                            await send_stage5_daily_reminder(bot, user, db)
+                            if user.platform == 'vk':
+                                await send_stage5_daily_reminder_vk(user, db)
+                            else:
+                                await send_stage5_daily_reminder(bot, user, db)
 
                             # Обновить время последнего напоминания
                             user.last_reminder_sent = now_utc
@@ -791,7 +1008,7 @@ async def check_and_send_reminders(bot: Bot):
                             today = now_user_tz.date()
 
                             if last_reminder_date == today:
-                                logger.debug(f"Пользователю {user.telegram_id} уже отправлено напоминание сегодня")
+                                logger.debug(f"Пользователю {user.platform_id} уже отправлено напоминание сегодня")
                                 continue
 
                         # Рассчитать дни с начала практик
@@ -801,17 +1018,18 @@ async def check_and_send_reminders(bot: Bot):
                         should_send, _ = should_send_reminder(user, days)
 
                         if should_send:
-                            # Отправить напоминание
-                            await send_practice_reminder(bot, user.telegram_id)
+                            # Отправить напоминание (VK общий fallback не реализован — пропускаем)
+                            if user.platform != 'vk':
+                                await send_practice_reminder(bot, user.telegram_id)
 
                             # Обновить время последнего напоминания
                             user.last_reminder_sent = now_utc
                             db.commit()
                         else:
-                            logger.debug(f"Триггер не сработал для пользователя {user.telegram_id} (день {days}, этап {user.current_stage})")
+                            logger.debug(f"Триггер не сработал для пользователя {user.platform_id} (день {days}, этап {user.current_stage})")
 
             except Exception as e:
-                logger.error(f"Ошибка при обработке пользователя {user.telegram_id}: {e}")
+                logger.error(f"Ошибка при обработке пользователя {user.platform_id}: {e}")
                 continue
 
     except Exception as e:
